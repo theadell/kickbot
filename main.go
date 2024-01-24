@@ -23,7 +23,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.HandleFunc("/commands", handleSlackCommands)
 	slog.Info("Server running")
-	http.ListenAndServe(":3000", nil)
+	http.ListenAndServe("127.0.0.1:3000", r)
 
 }
 
