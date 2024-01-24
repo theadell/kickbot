@@ -1,17 +1,63 @@
 package main
 
 import (
-	"log"
+	"io"
+	"log/slog"
+	"net/http"
 	"os"
 
 	"github.com/slack-go/slack"
 )
 
-func main() {
-	token := os.Getenv("KICKBOT_TOKEN")
-	channelID := os.Getenv("KICKBOT_CHANNELID")
+var token, channelID string
+var apiClient *slack.Client
 
-	api := slack.New(token)
+func main() {
+	token = os.Getenv("KICKBOT_TOKEN")
+	channelID = os.Getenv("KICKBOT_CHANNELID")
+	apiClient = slack.New(token)
+	// http.HandleFunc("/events", handleSlackEvents)
+	http.HandleFunc("/commands", handleSlackCommands)
+
+	slog.Info("Server running")
+	http.ListenAndServe(":3000", nil)
+
+}
+
+func handleSlackCommands(w http.ResponseWriter, r *http.Request) {
+	verifier, err := slack.NewSecretsVerifier(r.Header, os.Getenv("KICKBOT_SIGNING_SECRET"))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		slog.Debug("Failed to read request body", "error", err.Error())
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if _, err := verifier.Write(body); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if err := verifier.Ensure(); err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	cmd, err := slack.SlashCommandParse(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	switch cmd.Command {
+	case "/matchup":
+		sendLineUpMsg()
+	}
+}
+
+func sendLineUpMsg() {
 	attachment := slack.Attachment{
 		Text:       "New foosball game! Who's in?",
 		CallbackID: "game_join",
@@ -26,11 +72,9 @@ func main() {
 		},
 	}
 	message := slack.MsgOptionAttachments(attachment)
-	channel, timestamp, err := api.PostMessage(channelID, message)
+	channel, timestamp, err := apiClient.PostMessage(channelID, message)
 	if err != nil {
-		log.Fatalf("Failed to post message: %s", err)
+		slog.Error("Failed to send message", "error", err)
 	}
-
-	log.Printf("Message successfully sent to channel %s at %s", channel, timestamp)
-
+	slog.Info("Message send successfully", "channel", channel, "timestamp", timestamp)
 }
