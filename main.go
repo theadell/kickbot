@@ -62,13 +62,14 @@ func handleSlackCommands(w http.ResponseWriter, r *http.Request) {
 	}
 	switch cmd.Command {
 	case "/matchup":
-		sendLineUpMsg()
+		sendLineUpMsg(cmd.UserID)
 	}
 }
 
-func sendLineUpMsg() {
+func sendLineUpMsg(userId string) {
+	mention := "<@" + userId + ">"
 	attachment := slack.Attachment{
-		Text:       "New foosball game! Who's in?",
+		Text:       mention + " Started a new round! Who's in?",
 		CallbackID: "game_join",
 		Color:      "#4af030",
 		Actions: []slack.AttachmentAction{
