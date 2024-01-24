@@ -30,26 +30,30 @@ func main() {
 func handleSlackCommands(w http.ResponseWriter, r *http.Request) {
 	verifier, err := slack.NewSecretsVerifier(r.Header, os.Getenv("KICKBOT_SIGNING_SECRET"))
 	if err != nil {
+		slog.Error("failed to create verifier", "error", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.Debug("Failed to read request body", "error", err.Error())
+		slog.Error("Failed to read request body", "error", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	if _, err := verifier.Write(body); err != nil {
+		slog.Error("Failed to wrote request body to verifier", "error", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if err := verifier.Ensure(); err != nil {
+		slog.Info("Invalid request body", "error", err.Error())
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
 	cmd, err := slack.SlashCommandParse(r)
 	if err != nil {
+		slog.Error("Failed to parse slash command", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
