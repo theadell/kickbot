@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/slack-go/slack"
 )
 
@@ -16,9 +18,10 @@ func main() {
 	token = os.Getenv("KICKBOT_TOKEN")
 	channelID = os.Getenv("KICKBOT_CHANNELID")
 	apiClient = slack.New(token)
-	// http.HandleFunc("/events", handleSlackEvents)
-	http.HandleFunc("/commands", handleSlackCommands)
 
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.HandleFunc("/commands", handleSlackCommands)
 	slog.Info("Server running")
 	http.ListenAndServe(":3000", nil)
 
