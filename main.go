@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"io"
 	"log/slog"
 	"net/http"
@@ -34,13 +35,14 @@ func handleSlackCommands(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	body, err := io.ReadAll(r.Body)
+	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		slog.Error("Failed to read request body", "error", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if _, err := verifier.Write(body); err != nil {
+	r.Body.Close()
+	if _, err := verifier.Write(bodyBytes); err != nil {
 		slog.Error("Failed to wrote request body to verifier", "error", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -51,13 +53,13 @@ func handleSlackCommands(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 	cmd, err := slack.SlashCommandParse(r)
 	if err != nil {
 		slog.Error("Failed to parse slash command", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
 	switch cmd.Command {
 	case "/matchup":
 		sendLineUpMsg()
