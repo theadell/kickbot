@@ -18,19 +18,35 @@ func handleSlackCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch cmd.Command {
-	case "/kicker":
-		bot.startSetup(cmd.UserID)
+	case CMD_START_ROUND, CMD_START_1V1_ROUND:
+		bot.InitiateGame(cmd)
+	default:
+		slog.Warn("Recieved an invalid command", "command", cmd.Command, "sender", r.RemoteAddr)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+
 	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func handleSlackEvent(w http.ResponseWriter, r *http.Request) {
-	var payload slack.InteractionCallback
 
-	if err := json.Unmarshal([]byte(r.FormValue("payload")), &payload); err != nil {
+	var interactionCallback slack.InteractionCallback
+
+	if err := json.Unmarshal([]byte(r.FormValue("payload")), &interactionCallback); err != nil {
 		slog.Error("Failed to decode interaction body", "error", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	bot.sendEphemeral(payload.User.ID, bot.channelID, "Got it, you are in!")
-
+	switch interactionCallback.ActionID {
+	case ACTION_JOIN_ROUND:
+		bot.JoinGame(interactionCallback.User.ID)
+	case ACTION_LEAVE_ROUND:
+		bot.LeaveGame(interactionCallback.User.ID)
+	default:
+		slog.Warn("Invalid Action Id", "actionId", interactionCallback.ActionID, "sender", r.RemoteAddr)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
