@@ -66,6 +66,7 @@ func (bot *GameBot) InitiateGame(command slack.SlashCommand) {
 			bot.resetState()
 			return
 		}
+		bot.messageTs = ts
 		slog.Info("Game initiation message was sent successfully", "timestamp", ts, "channel", bot.channelID)
 
 	case GameFormation:
