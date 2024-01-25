@@ -38,7 +38,14 @@ func handleSlackEvent(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	switch interactionCallback.ActionID {
+
+	actions := interactionCallback.ActionCallback.BlockActions
+	if len(actions) < 1 {
+		slog.Error("Invalid or empty block action callback", "payload", interactionCallback)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	switch actions[0].ActionID {
 	case ACTION_JOIN_ROUND:
 		bot.JoinGame(interactionCallback.User.ID)
 	case ACTION_LEAVE_ROUND:
