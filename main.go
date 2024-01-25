@@ -47,7 +47,7 @@ func main() {
 
 	// Server
 	srv := &http.Server{
-		Addr:           fmt.Sprintf("%s:%s", "127.0.0.1", *port),
+		Addr:           fmt.Sprintf(":%s", *port),
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		IdleTimeout:    60 * time.Second,
