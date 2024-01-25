@@ -24,10 +24,11 @@ type GameBot struct {
 	mu        *sync.Mutex
 }
 
-func NewGameBot(apiToken string) *GameBot {
+func NewGameBot(apiToken, channelID string) *GameBot {
 	api := slack.New(apiToken)
 	return &GameBot{
 		apiClient: api,
+		channelID: channelID,
 		state:     WaitState,
 		players:   make([]string, 0),
 		mu:        &sync.Mutex{},
@@ -70,7 +71,7 @@ func (bot *GameBot) startSetup(userID string) {
 		},
 	}
 	message := slack.MsgOptionAttachments(attachment)
-	channel, timestamp, err := bot.apiClient.PostMessage(channelID, message)
+	channel, timestamp, err := bot.apiClient.PostMessage(bot.channelID, message)
 	if err != nil {
 		slog.Error("Failed to send message", "error", err)
 		bot.state = WaitState
