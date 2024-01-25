@@ -28,7 +28,7 @@ var leaveBtn = slack.ButtonBlockElement{
 	Style: "danger",
 }
 
-var actionBlock = slack.NewActionBlock("ACT_GP_01", joinBtn, leaveBtn)
+var actionBlock = slack.NewActionBlock("GAME_ACTIONS", joinBtn, leaveBtn)
 
 func NewGameInitiationMsg(playerId string, duel bool) slack.MsgOption {
 	var text string
@@ -39,7 +39,7 @@ func NewGameInitiationMsg(playerId string, duel bool) slack.MsgOption {
 		text = fmt.Sprintf("<!here>, <@%s> hat Bock auf Kicker! Wer macht mit? Noch 3 Leute gesucht!", playerId)
 	}
 	textBlock := slack.NewSectionBlock(slack.NewTextBlockObject("mrkdwn", text, false, false), nil, nil)
-	return slack.MsgOptionBlocks(textBlock, actionBlock)
+	return slack.MsgOptionBlocks(textBlock, slack.NewDividerBlock(), actionBlock)
 
 }
 
