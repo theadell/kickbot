@@ -18,7 +18,7 @@ const (
 	CMD_START_ROUND     string = "/kicker"    // Start a standard game
 	CMD_START_1V1_ROUND        = "/kicker1v1" // Start 1v1 duel game
 	ACTION_JOIN_ROUND          = "GAME_JOIN"  // Join a game
-	ACTION_LEAVE_ROUND         = "GAME_LEAVE"
+	ACTION_LEAVE_ROUND         = "GAME_LEAVE" // Leave a game in "formation" state after joining
 )
 
 type GameBot struct {
