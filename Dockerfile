@@ -1,4 +1,4 @@
-FROM golang:1.21-alpine as builder
+FROM --platform=linux/amd64 golang:1.21-alpine as builder
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o kickbot .
 
-FROM alpine:latest
+FROM --platform=linux/amd64 alpine:latest
 
 # Install CA certificates, necessary for making HTTPS requests
 RUN apk --no-cache add ca-certificates
