@@ -24,8 +24,7 @@ func main() {
 	envPort := os.Getenv("KICKBOT_PORT")
 
 	// Flags
-	defaultPort := "4000"
-	port := flag.String("port", defaultPort, "Define the port on which the server will listen")
+	port := flag.String("port", "4000", "Define the port on which the server will listen")
 	flag.Parse()
 	if envPort != "" {
 		*port = envPort
@@ -37,8 +36,8 @@ func main() {
 	// Routes
 	r := chi.NewRouter()
 
-	r.Use(middleware.Recoverer)
 	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
 	r.Use(middleware.RealIP)
 	r.Use(SlackVerifyMiddleware(signingSecret))
 
