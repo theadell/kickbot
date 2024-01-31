@@ -30,10 +30,10 @@ var leaveBtn = slack.ButtonBlockElement{
 
 var actionBlock = slack.NewActionBlock("GAME_ACTIONS", joinBtn, leaveBtn)
 
-func NewGameInitiationMsg(playerId string, duel bool) slack.MsgOption {
+func NewGameInitiationMsg(playerId string, gameType GameType) slack.MsgOption {
 	var text string
 
-	if duel {
+	if gameType == GameTypeOneVsOne {
 		text = fmt.Sprintf("<!here>, <@%s> sucht einen Herausforderer für ein 1v1 Kicker-Duell. Wer traut sich", playerId)
 	} else {
 		text = fmt.Sprintf("<!here>, <@%s> hat Bock auf Kicker! Wer macht mit? Noch 3 Leute gesucht!", playerId)

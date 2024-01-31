@@ -7,19 +7,18 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/slack-go/slack"
 )
-
-var bot *GameBot
 
 func main() {
 
 	// Environment Variables
 	token := os.Getenv("KICKBOT_TOKEN")
-	channelID := os.Getenv("KICKBOT_CHANNELID")
 	signingSecret := os.Getenv("KICKBOT_SIGNING_SECRET")
 	envPort := os.Getenv("KICKBOT_PORT")
 
@@ -30,9 +29,12 @@ func main() {
 		*port = envPort
 	}
 
-	// Game bot
-	bot = NewGameBot(token, channelID)
-
+	// Game Manager
+	gm := &GameManager{
+		apiClient: slack.New(token),
+		games:     make(map[SlackChannel]*Game),
+		mu:        sync.Mutex{},
+	}
 	// Routes
 	r := chi.NewRouter()
 
@@ -41,8 +43,8 @@ func main() {
 	r.Use(middleware.RealIP)
 	r.Use(SlackVerifyMiddleware(signingSecret))
 
-	r.HandleFunc("/commands", handleSlackCommand)
-	r.HandleFunc("/events", handleSlackEvent)
+	r.HandleFunc("/commands", handleSlackCommand(gm))
+	r.HandleFunc("/events", handleSlackEvent(gm))
 
 	// Server
 	srv := &http.Server{
