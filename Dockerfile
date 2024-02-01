@@ -7,9 +7,9 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o kickbot
+RUN CGO_ENABLED=0 GOOS=linux go build -o kickbot ./cmd/kickbot/
 
-FROM --platform=linux/amd64 alpine:latest
+FROM --platform=linux/amd64 alpine:3.19
 
 RUN apk --no-cache add ca-certificates
 
