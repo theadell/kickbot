@@ -30,7 +30,7 @@ var leaveBtn = slack.ButtonBlockElement{
 
 var actionBlock = slack.NewActionBlock("GAME_ACTIONS", joinBtn, leaveBtn)
 
-func NewGameInitiationMsg(playerId string, gameType GameType) slack.MsgOption {
+func NewGameRequestMsg(playerId string, gameType GameType) slack.MsgOption {
 	var text string
 
 	if gameType == GameTypeOneVsOne {
@@ -43,7 +43,7 @@ func NewGameInitiationMsg(playerId string, gameType GameType) slack.MsgOption {
 
 }
 
-func NewGameUpdateMsg(playerIds []string, quorum int) slack.MsgOption {
+func GameRequestUpdateMsg(playerIds []string, quorum int) slack.MsgOption {
 	needed := quorum - len(playerIds)
 	var playerMentions string
 	for _, id := range playerIds {

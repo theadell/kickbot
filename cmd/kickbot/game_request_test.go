@@ -8,7 +8,7 @@ func TestNewGame(t *testing.T) {
 	player := "Player1"
 
 	// Test for 2 vs 2 Game
-	game1 := NewGame(GameTypeTwoVsTwo, player)
+	game1 := NewGameRequest(GameTypeTwoVsTwo, player)
 	if game1.quorum != 4 {
 		t.Errorf("Expected quorum of 4 for TwoVsTwoGame, got %d", game1.quorum)
 	}
@@ -17,7 +17,7 @@ func TestNewGame(t *testing.T) {
 	}
 
 	// Test for 1 vs 1 Game
-	game2 := NewGame(GameTypeOneVsOne, player)
+	game2 := NewGameRequest(GameTypeOneVsOne, player)
 	if game2.quorum != 2 {
 		t.Errorf("Expected quorum of 2 for OneVsOneGame, got %d", game2.quorum)
 	}

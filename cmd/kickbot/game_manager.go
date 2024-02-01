@@ -1,49 +1,68 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/slack-go/slack"
 )
 
 const (
-	CMD_START_ROUND     string = "/kicker"    // Start a standard game
-	CMD_START_1V1_ROUND        = "/kicker1v1" // Start 1v1 duel game
-	ACTION_JOIN_ROUND          = "GAME_JOIN"  // Join a game
-	ACTION_LEAVE_ROUND         = "GAME_LEAVE" // Leave a game in "formation" state after joining
+	CMD_START_ROUND         string        = "/kicker"    // Start a standard game
+	CMD_START_1V1_ROUND                   = "/kicker1v1" // Start 1v1 duel game
+	ACTION_JOIN_ROUND                     = "GAME_JOIN"  // Join a game
+	ACTION_LEAVE_ROUND                    = "GAME_LEAVE" // Leave a game in "formation" state after joining
+	DEFAULT_GAMEREQ_TIMEOUT time.Duration = 30 * time.Minute
 )
 
 type SlackChannel string
 
 type GameManager struct {
-	apiClient SlackClient
-	games     map[SlackChannel]*Game
-	mu        sync.Mutex
+	apiClient       SlackClient
+	gameRequests    map[SlackChannel]*GameRequest
+	timeoutChan     chan SlackChannel
+	mu              sync.Mutex
+	timeoutDuration time.Duration
 }
 
+func NewGameManager(client SlackClient, timeoutDuration time.Duration) *GameManager {
+	gameMgr := &GameManager{
+		apiClient:       client,
+		gameRequests:    make(map[SlackChannel]*GameRequest),
+		mu:              sync.Mutex{},
+		timeoutChan:     make(chan SlackChannel, 10),
+		timeoutDuration: timeoutDuration,
+	}
+	go gameMgr.handleTimeouts()
+	return gameMgr
+}
 func (gameMgr *GameManager) CreateGame(channel SlackChannel, player string, gameType GameType) {
 
-	game := NewGame(gameType, player)
+	gameReq := NewGameRequest(gameType, player)
 
-	if !gameMgr.setGameIfNotExists(channel, game) {
+	if !gameMgr.setGameRequestIfNotExists(channel, gameReq) {
 		gameMgr.apiClient.PostEphemeral(string(channel), player, slack.MsgOptionText("Eine runde wird bereits vorbereitet!", false))
 		return
 	}
 
-	msg := NewGameInitiationMsg(player, gameType)
+	msg := NewGameRequestMsg(player, gameType)
 	_, ts, err := gameMgr.apiClient.PostMessage(string(channel), msg)
 	if err != nil {
 		slog.Error("Failed to send message", "error", err)
-		gameMgr.deleteGame(channel)
+		gameMgr.deleteGameRequest(channel)
 		gameMgr.apiClient.PostEphemeral(string(channel), player, slack.MsgOptionText("Ein Feheler ist aufgetreten!", false))
 		return
 	}
 
-	game.mu.Lock()
-	game.messageTs = ts
-	game.mu.Unlock()
+	gameReq.mu.Lock()
+	gameReq.messageTs = ts
+	gameReq.timer = time.AfterFunc(gameMgr.timeoutDuration, func() {
+		gameMgr.timeoutChan <- channel
+	})
+	gameReq.mu.Unlock()
 
 }
 
@@ -52,34 +71,34 @@ func (gameMgr *GameManager) JoinGame(channel SlackChannel, player string) {
 	var gameMsgTS string
 	var isGameComplete bool
 
-	game, exists := gameMgr.getGame(channel)
+	gameReq, exists := gameMgr.getGameRequest(channel)
 	if !exists {
 		gameMgr.apiClient.PostEphemeral(string(channel), player, slack.MsgOptionText("Ein Fehler ist aufgetreten", false))
 		return
 	}
 
 	// lock game to prevent data races on concurrent joins & leaves
-	game.mu.Lock()
+	gameReq.mu.Lock()
 	{
 		// check if game is already full
-		isGameComplete = len(game.players) == game.quorum
+		isGameComplete = len(gameReq.players) == gameReq.quorum
 		if isGameComplete {
-			game.mu.Unlock()
+			gameReq.mu.Unlock()
 			gameMgr.apiClient.PostEphemeral(string(channel), player, slack.MsgOptionText("Das Spiel ist bereits voll.", false))
 			return
 		}
 
-		game.players = append(game.players, player)
+		gameReq.players = append(gameReq.players, player)
 
 		// check if game has become full after the player joined
-		isGameComplete = len(game.players) == game.quorum
-		gameMsgTS = game.messageTs
-		updateMsg = NewGameUpdateMsg(game.players, game.quorum)
+		isGameComplete = len(gameReq.players) == gameReq.quorum
+		gameMsgTS = gameReq.messageTs
+		updateMsg = GameRequestUpdateMsg(gameReq.players, gameReq.quorum)
 	}
-	game.mu.Unlock()
+	gameReq.mu.Unlock()
 
 	if isGameComplete {
-		gameMgr.deleteGame(channel)
+		gameMgr.deleteGameRequest(channel)
 	}
 
 	// TODO: Implement retry mechanism to be reslient against transient network errors
@@ -94,7 +113,7 @@ func (gameMgr *GameManager) JoinGame(channel SlackChannel, player string) {
 
 func (gameMgr *GameManager) LeaveGame(channel SlackChannel, player string) {
 
-	game, exists := gameMgr.getGame(channel)
+	gameReq, exists := gameMgr.getGameRequest(channel)
 	if !exists {
 		gameMgr.apiClient.PostEphemeral(string(channel), player, slack.MsgOptionText("Ein Fehler ist aufgetreten", false))
 		return
@@ -104,25 +123,25 @@ func (gameMgr *GameManager) LeaveGame(channel SlackChannel, player string) {
 	var isLastPlayer bool
 	var gameMsgTS string
 
-	game.mu.Lock()
+	gameReq.mu.Lock()
 	{
-		idx := slices.Index(game.players, player)
+		idx := slices.Index(gameReq.players, player)
 		if idx < 0 {
-			game.mu.Unlock()
+			gameReq.mu.Unlock()
 			gameMgr.apiClient.PostEphemeral(string(channel), player, slack.MsgOptionText("Du bist nicht in der aktuellen Runde.", false))
 			return
 		}
 		// remove player from game
-		game.players = append(game.players[:idx], game.players[idx+1:]...)
-		isLastPlayer = len(game.players) == 0
-		updateMsg = NewGameUpdateMsg(game.players, game.quorum)
-		gameMsgTS = game.messageTs
+		gameReq.players = append(gameReq.players[:idx], gameReq.players[idx+1:]...)
+		isLastPlayer = len(gameReq.players) == 0
+		updateMsg = GameRequestUpdateMsg(gameReq.players, gameReq.quorum)
+		gameMsgTS = gameReq.messageTs
 	}
-	game.mu.Unlock()
+	gameReq.mu.Unlock()
 
 	if isLastPlayer {
-		gameMgr.deleteGame(channel)
-		_, _, err := gameMgr.apiClient.DeleteMessage(string(channel), game.messageTs)
+		gameMgr.deleteGameRequest(channel)
+		_, _, err := gameMgr.apiClient.DeleteMessage(string(channel), gameMsgTS)
 		if err != nil {
 			slog.Error("Failed to delete game message", "error", err)
 		}
@@ -134,38 +153,58 @@ func (gameMgr *GameManager) LeaveGame(channel SlackChannel, player string) {
 	}
 }
 
-func (gameMgr *GameManager) getGame(channel SlackChannel) (*Game, bool) {
+func (gameMgr *GameManager) getGameRequest(channel SlackChannel) (*GameRequest, bool) {
 	gameMgr.mu.Lock()
 	defer gameMgr.mu.Unlock()
 
-	game, exists := gameMgr.games[channel]
+	game, exists := gameMgr.gameRequests[channel]
 	return game, exists
 }
-func (gameMgr *GameManager) setGame(channel SlackChannel, game *Game) {
+func (gameMgr *GameManager) setGameRequest(channel SlackChannel, game *GameRequest) {
 	gameMgr.mu.Lock()
-	gameMgr.games[channel] = game
+	gameMgr.gameRequests[channel] = game
 	gameMgr.mu.Unlock()
 }
 
-func (gameMgr *GameManager) deleteGame(channel SlackChannel) {
+func (gameMgr *GameManager) deleteGameRequest(channel SlackChannel) {
+	fmt.Println("DELETING GAME")
 	gameMgr.mu.Lock()
 	defer gameMgr.mu.Unlock()
 
-	if _, exists := gameMgr.games[channel]; exists {
-		delete(gameMgr.games, channel)
+	if gameReq, exists := gameMgr.gameRequests[channel]; exists {
+		gameReq.mu.Lock()
+		if gameReq.timer != nil {
+			gameReq.timer.Stop()
+		}
+		gameReq.mu.Unlock()
+		delete(gameMgr.gameRequests, channel)
 	}
 }
 
-// setGameIfNotExists sets a new game for the specified channel only if there isn't already a game present.
+// setGameRequestIfNotExists sets a new game for the specified channel only if there isn't already a game present.
 // It returns true if the new game was set, or false if a game already exists for the channel.
-func (gm *GameManager) setGameIfNotExists(channel SlackChannel, game *Game) bool {
+func (gm *GameManager) setGameRequestIfNotExists(channel SlackChannel, game *GameRequest) bool {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
 
-	if _, exists := gm.games[channel]; exists {
+	if _, exists := gm.gameRequests[channel]; exists {
 		return false
 	}
 
-	gm.games[channel] = game
+	gm.gameRequests[channel] = game
 	return true
+}
+
+func (gameMgr *GameManager) handleTimeouts() {
+	for channel := range gameMgr.timeoutChan {
+		if gameReq, exists := gameMgr.getGameRequest(channel); exists {
+			ts := gameReq.messageTs
+			gameMgr.deleteGameRequest(channel)
+			gameMgr.apiClient.DeleteMessage(string(channel), ts)
+		}
+	}
+}
+
+func (gameMgr *GameManager) Shutdown() {
+	close(gameMgr.timeoutChan)
 }

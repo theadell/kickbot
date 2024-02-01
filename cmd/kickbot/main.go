@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -30,11 +29,7 @@ func main() {
 	}
 
 	// Game Manager
-	gm := &GameManager{
-		apiClient: slack.New(token),
-		games:     make(map[SlackChannel]*Game),
-		mu:        sync.Mutex{},
-	}
+	gm := NewGameManager(slack.New(token), DEFAULT_GAMEREQ_TIMEOUT)
 	// Routes
 	r := chi.NewRouter()
 
