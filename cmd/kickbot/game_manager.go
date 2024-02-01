@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
 	"slices"
 	"sync"
@@ -11,11 +10,11 @@ import (
 )
 
 const (
-	CMD_START_ROUND         string        = "/kicker"    // Start a standard game
-	CMD_START_1V1_ROUND                   = "/kicker1v1" // Start 1v1 duel game
-	ACTION_JOIN_ROUND                     = "GAME_JOIN"  // Join a game
-	ACTION_LEAVE_ROUND                    = "GAME_LEAVE" // Leave a game in "formation" state after joining
-	DEFAULT_GAMEREQ_TIMEOUT time.Duration = 30 * time.Minute
+	CMD_START_ROUND         string        = "/kicker"        // Start a standard game
+	CMD_START_1V1_ROUND                   = "/kicker1v1"     // Start 1v1 duel game
+	ACTION_JOIN_ROUND                     = "GAME_JOIN"      // Join a game
+	ACTION_LEAVE_ROUND                    = "GAME_LEAVE"     // Leave a game in "formation" state after joining
+	DEFAULT_GAMEREQ_TIMEOUT time.Duration = 30 * time.Minute // Time after which a non completed game request is deleted
 )
 
 type SlackChannel string
@@ -39,6 +38,12 @@ func NewGameManager(client SlackClient, timeoutDuration time.Duration) *GameMana
 	go gameMgr.handleTimeouts()
 	return gameMgr
 }
+
+// CreateGame initializes a new game request in the specified Slack channel. It posts a game request message to
+// the channel, allowing users to join. it handles the game creation process triggered by a Slack slash command (/kicker).
+// If a game is already being prepared in the channel, no new game is created and
+// it notifies the user who attempted to start a new game.
+// The game type (e.g., TwoVsTwo, OneVsOne) is specified in the call. (/kicker & /kicker1v1)
 func (gameMgr *GameManager) CreateGame(channel SlackChannel, player string, gameType GameType) {
 
 	gameReq := NewGameRequest(gameType, player)
@@ -66,6 +71,10 @@ func (gameMgr *GameManager) CreateGame(channel SlackChannel, player string, game
 
 }
 
+// JoinGame is called when a user wants to join an existing game request. It updates the game request status
+// in the Slack channel. If the game request reaches quorum, it marks the game as ready to start and notifies the users. This function
+// handles user interactions with the 'join' or 'Bin dabei!' button on the Slack message interface
+// which triggers the `ACTION_JOIN_ROUND` action.
 func (gameMgr *GameManager) JoinGame(channel SlackChannel, player string) {
 	var updateMsg slack.MsgOption
 	var gameMsgTS string
@@ -111,6 +120,10 @@ func (gameMgr *GameManager) JoinGame(channel SlackChannel, player string) {
 	}
 }
 
+// LeaveGame is called when a user wants to leave a game request they had previously joined. This function updates the
+// game request status in the Slack channel. If all players leave, the game request is cancelled. It handles
+// user interactions with the 'leave' or 'bin raus' button on the Slack message interface which triggers
+// the 'ACTION_LEAVE_ROUND' action
 func (gameMgr *GameManager) LeaveGame(channel SlackChannel, player string) {
 
 	gameReq, exists := gameMgr.getGameRequest(channel)
@@ -167,7 +180,6 @@ func (gameMgr *GameManager) setGameRequest(channel SlackChannel, game *GameReque
 }
 
 func (gameMgr *GameManager) deleteGameRequest(channel SlackChannel) {
-	fmt.Println("DELETING GAME")
 	gameMgr.mu.Lock()
 	defer gameMgr.mu.Unlock()
 
@@ -195,6 +207,9 @@ func (gm *GameManager) setGameRequestIfNotExists(channel SlackChannel, game *Gam
 	return true
 }
 
+// handleTimeouts manages the timeouts of game requests. It listens for timeout
+// signals on a channel and handles the expiration of game requests accordingly. When a timeout occurs, the
+// function deletes the game request and its associated Slack message from the specified channel.
 func (gameMgr *GameManager) handleTimeouts() {
 	for channel := range gameMgr.timeoutChan {
 		if gameReq, exists := gameMgr.getGameRequest(channel); exists {
@@ -205,6 +220,7 @@ func (gameMgr *GameManager) handleTimeouts() {
 	}
 }
 
+// Shutdown closes the timeout channel and releases all used resources
 func (gameMgr *GameManager) Shutdown() {
 	close(gameMgr.timeoutChan)
 }

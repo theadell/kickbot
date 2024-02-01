@@ -20,10 +20,10 @@ var quorumMap = map[GameType]int{
 
 type GameRequest struct {
 	players   []string
-	quorum    int    // number of players needed for the game
-	messageTs string // slack timestamp for the message of the game request sent by the bot
-	mu        *sync.Mutex
+	quorum    int         // number of players needed for the game
+	messageTs string      // slack timestamp for the message of the game request sent by the bot
 	timer     *time.Timer // Timeout timer
+	mu        *sync.Mutex
 }
 
 func NewGameRequest(gameType GameType, player string) *GameRequest {
