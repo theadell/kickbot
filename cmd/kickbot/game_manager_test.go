@@ -31,7 +31,7 @@ func TestConcurrentGameCreationForSingleChannel(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	numberOfAttempts := 10
+	numberOfAttempts := 50
 	for i := 0; i < numberOfAttempts; i++ {
 		wg.Add(1)
 		go func(userID string) {
