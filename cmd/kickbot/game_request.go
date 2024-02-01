@@ -1,6 +1,9 @@
 package main
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 type GameType int
 
@@ -15,15 +18,16 @@ var quorumMap = map[GameType]int{
 	GameTypeOneVsOne: 2, // 1 vs 1 game requires 2 players
 }
 
-type Game struct {
+type GameRequest struct {
 	players   []string
-	quorum    int
-	messageTs string
+	quorum    int         // number of players needed for the game
+	messageTs string      // slack timestamp for the message of the game request sent by the bot
+	timer     *time.Timer // Timeout timer
 	mu        *sync.Mutex
 }
 
-func NewGame(gameType GameType, player string) *Game {
-	return &Game{
+func NewGameRequest(gameType GameType, player string) *GameRequest {
+	return &GameRequest{
 		players:   []string{player},
 		quorum:    quorumMap[gameType],
 		messageTs: "",

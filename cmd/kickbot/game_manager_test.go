@@ -5,6 +5,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	gomock "go.uber.org/mock/gomock"
 )
@@ -25,13 +26,9 @@ func TestConcurrentGameCreationForSingleChannel(t *testing.T) {
 		PostEphemeral(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return("timestamp", nil).AnyTimes()
 
-	gm := &GameManager{
-		apiClient: mockSlackClient,
-		games:     make(map[SlackChannel]*Game),
-	}
-
+	gm := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
 	var wg sync.WaitGroup
-	numberOfAttempts := 10
+	numberOfAttempts := 50
 	for i := 0; i < numberOfAttempts; i++ {
 		wg.Add(1)
 		go func(userID string) {
@@ -43,8 +40,8 @@ func TestConcurrentGameCreationForSingleChannel(t *testing.T) {
 
 	wg.Wait()
 
-	if len(gm.games) != 1 {
-		t.Errorf("Expected only one game to be created, but found %d", len(gm.games))
+	if len(gm.gameRequests) != 1 {
+		t.Errorf("Expected only one game to be created, but found %d", len(gm.gameRequests))
 	}
 }
 
@@ -64,10 +61,7 @@ func TestConcurrentGameCreationForMultipleChannels(t *testing.T) {
 		PostEphemeral(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return("timestamp", nil).MaxTimes(0)
 
-	gm := &GameManager{
-		apiClient: mockSlackClient,
-		games:     make(map[SlackChannel]*Game),
-	}
+	gm := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
 
 	var wg sync.WaitGroup
 	numberOfAttempts := 10
@@ -82,8 +76,8 @@ func TestConcurrentGameCreationForMultipleChannels(t *testing.T) {
 
 	wg.Wait()
 
-	if len(gm.games) != nGames {
-		t.Errorf("Expected only one game to be created, but found %d", len(gm.games))
+	if len(gm.gameRequests) != nGames {
+		t.Errorf("Expected only one game to be created, but found %d", len(gm.gameRequests))
 	}
 }
 
@@ -111,10 +105,7 @@ func TestConcurrentJoins(t *testing.T) {
 		PostEphemeral(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return("timestamp", nil).MaxTimes(nJoins - quorom + 1)
 
-	gm := &GameManager{
-		apiClient: mockSlackClient,
-		games:     make(map[SlackChannel]*Game),
-	}
+	gm := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
 
 	channelID := "12345678"
 
@@ -134,9 +125,11 @@ func TestConcurrentJoins(t *testing.T) {
 
 	wg.Wait()
 
-	if len(gm.games) != 0 {
-		t.Errorf("Expected all games to be deleted, but found %d games", len(gm.games))
+	gm.mu.Lock()
+	if len(gm.gameRequests) != 0 {
+		t.Errorf("Expected all games to be deleted, but found %d games", len(gm.gameRequests))
 	}
+	gm.mu.Unlock()
 }
 
 func TestConcurrentLeaves(t *testing.T) {
@@ -154,15 +147,12 @@ func TestConcurrentLeaves(t *testing.T) {
 		DeleteMessage(gomock.Any(), gomock.Any()).
 		Return("ch", "ts", nil).Times(1)
 
-	gm := &GameManager{
-		apiClient: mockSlackClient,
-		games:     make(map[SlackChannel]*Game),
-	}
+	gm := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
 
 	channel := "lpzg-24"
 	players := []string{"p1", "p2", "p3"}
 
-	gm.games[SlackChannel(channel)] = &Game{
+	gm.gameRequests[SlackChannel(channel)] = &GameRequest{
 		players:   slices.Clone(players),
 		quorum:    4,
 		messageTs: "ts",
@@ -179,9 +169,11 @@ func TestConcurrentLeaves(t *testing.T) {
 	}
 	wg.Wait()
 
-	if len(gm.games) != 0 {
-		t.Errorf("Expected all games to be deleted, but found %d games", len(gm.games))
+	gm.mu.Lock()
+	if len(gm.gameRequests) != 0 {
+		t.Errorf("Expected all games to be deleted, but found %d games", len(gm.gameRequests))
 	}
+	gm.mu.Unlock()
 }
 
 func TestConcurrentLeavesAndJoins(t *testing.T) {
@@ -211,12 +203,9 @@ func TestConcurrentLeavesAndJoins(t *testing.T) {
 		PostEphemeral(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return("timestamp", nil).MaxTimes(4)
 
-	gm := &GameManager{
-		apiClient: mockSlackClient,
-		games:     make(map[SlackChannel]*Game),
-	}
+	gm := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
 
-	gm.games[SlackChannel(channel)] = &Game{
+	gm.gameRequests[SlackChannel(channel)] = &GameRequest{
 		players:   slices.Clone(players),
 		quorum:    4,
 		messageTs: "ts",
@@ -240,9 +229,11 @@ func TestConcurrentLeavesAndJoins(t *testing.T) {
 	}
 	wg.Wait()
 
-	if len(gm.games) != 0 {
-		t.Errorf("Expected all games to be deleted, but found %d games", len(gm.games))
+	gm.mu.Lock()
+	if len(gm.gameRequests) != 0 {
+		t.Errorf("Expected all games to be deleted, but found %d games", len(gm.gameRequests))
 	}
+	gm.mu.Unlock()
 }
 
 func TestConcurrentLeaveAndJoin(t *testing.T) {
@@ -272,12 +263,8 @@ func TestConcurrentLeaveAndJoin(t *testing.T) {
 		PostEphemeral(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return("timestamp", nil).MaxTimes(1)
 
-	gm := &GameManager{
-		apiClient: mockSlackClient,
-		games:     make(map[SlackChannel]*Game),
-	}
-
-	gm.games[SlackChannel(channel)] = &Game{
+	gm := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
+	gm.gameRequests[SlackChannel(channel)] = &GameRequest{
 		players:   []string{initialPlayer},
 		quorum:    4,
 		messageTs: "ts",
@@ -299,10 +286,108 @@ func TestConcurrentLeaveAndJoin(t *testing.T) {
 
 	wg.Wait()
 
-	game, exists := gm.games[SlackChannel(channel)]
+	game, exists := gm.gameRequests[SlackChannel(channel)]
 	if exists {
 		if len(game.players) != 1 {
 			t.Errorf("Expected the game to have 1 player, found %d", len(game.players))
 		}
 	}
+}
+
+func TestGameReqTimeout(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockSlackClient := NewMockSlackClient(ctrl)
+
+	nGames := 20
+
+	// nGames message for the game creation
+	mockSlackClient.EXPECT().
+		PostMessage(gomock.Any(), gomock.Any()).
+		Return("channelID", "timestamp", nil).Times(nGames)
+
+	// nGames messages for game deletion
+	mockSlackClient.EXPECT().
+		DeleteMessage(gomock.Any(), gomock.Any()).
+		Return("ch", "ts", nil).MaxTimes(nGames)
+
+	gm := NewGameManager(mockSlackClient, time.Millisecond*100)
+	for i := 0; i < nGames; i++ {
+		gm.CreateGame(SlackChannel(fmt.Sprintf("channel-%d", i)), "test", GameTypeTwoVsTwo)
+	}
+	time.Sleep(125 * time.Millisecond)
+	gm.mu.Lock()
+	if len(gm.gameRequests) != 0 {
+		t.Errorf("Expected all games to be deleted, but found %d games", len(gm.gameRequests))
+	}
+	gm.mu.Unlock()
+}
+
+func TestGameCompletionBeforeTimeout(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockSlackClient := NewMockSlackClient(ctrl)
+
+	// Message For game creation
+	mockSlackClient.EXPECT().
+		PostMessage(gomock.Any(), gomock.Any()).
+		Return("channelID", "timestamp", nil).Times(1)
+
+	// Update message for game completion
+	mockSlackClient.EXPECT().
+		UpdateMessage(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("channelID", "ts", "text", nil).MaxTimes(2)
+
+	// No Deletion Should Happen
+	mockSlackClient.EXPECT().
+		DeleteMessage(gomock.Any(), gomock.Any()).
+		Return("ch", "ts", nil).Times(0)
+
+	gm := NewGameManager(mockSlackClient, 100*time.Millisecond)
+	channel := SlackChannel("test-channel")
+
+	time.Sleep(50 * time.Millisecond)
+
+	gm.CreateGame(channel, "test-player-01", GameTypeOneVsOne)
+	gm.JoinGame(channel, "test-player-02")
+
+	// Check if the game has been deleted
+	gm.mu.Lock()
+	if _, exists := gm.gameRequests[channel]; exists {
+		t.Errorf("Game was not correctly deleted upon completion")
+	}
+	gm.mu.Unlock()
+}
+
+func TestGameCancellationBeforeTimeout(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockSlackClient := NewMockSlackClient(ctrl)
+
+	// Expect 1 PostMessage For game creation
+	mockSlackClient.EXPECT().
+		PostMessage(gomock.Any(), gomock.Any()).
+		Return("channelID", "timestamp", nil).Times(1)
+	// Expect 1 deletion for cancellation
+	mockSlackClient.EXPECT().
+		DeleteMessage(gomock.Any(), gomock.Any()).
+		Return("ch", "ts", nil).Times(1)
+
+	gm := NewGameManager(mockSlackClient, 100*time.Millisecond)
+	channel := SlackChannel("test-channel")
+	player := "test-player"
+	gm.CreateGame(channel, player, GameTypeTwoVsTwo)
+
+	gm.LeaveGame(channel, player)
+
+	time.Sleep(100 * time.Millisecond)
+
+	gm.mu.Lock()
+	if _, exists := gm.gameRequests[channel]; exists {
+		t.Errorf("Game was not correctly deleted upon cancellation")
+	}
+	gm.mu.Unlock()
 }
