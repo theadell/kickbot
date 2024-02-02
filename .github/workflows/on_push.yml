@@ -7,3 +7,4 @@ jobs:
         uses: ./.github/workflows/build.yml
     release:
         uses: ./.github/workflows/release.yml
+        secrets: inherit
