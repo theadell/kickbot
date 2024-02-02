@@ -1,5 +1,10 @@
 on:
     workflow_call:
+        secrets:
+            DOCKERHUB_USERNAME:
+                required: true
+            DOCKERHUB_PASSWORD:
+                required: true
 
 jobs:
     release:
@@ -22,7 +27,7 @@ jobs:
               id: meta
               uses: docker/metadata-action@v4
               with:
-                  images: ${{ env.IMAGE_NAME }}
+                  images: "kickbot"
 
             - name: Build and push
               uses: docker/build-push-action@v5
