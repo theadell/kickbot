@@ -11,7 +11,7 @@ on:
                 required: true
 
 env:
-    DOCKER_COMPOSE_PATH: path/to/docker-compose
+    DOCKER_COMPOSE_PATH: /opt/docker/kickbot
 
 jobs:
     build:
