@@ -27,4 +27,4 @@ jobs:
                   port: ${{ secrets.SSH_PORT }}
                   script: |
                       cd ${{ env.DOCKER_COMPOSE_PATH }}
-                      docker compose pull && docker compose restart --force-recreate || exit 1
+                      docker compose pull && docker compose restart || exit 1
