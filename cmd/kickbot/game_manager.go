@@ -97,6 +97,12 @@ func (gameMgr *GameManager) JoinGame(channel SlackChannel, player string) {
 			return
 		}
 
+		if idx := slices.Index(gameReq.players, player); idx != -1 {
+			gameReq.mu.Unlock()
+			gameMgr.apiClient.PostEphemeral(string(channel), player, slack.MsgOptionText("Du bist bereits im Spiel.", false))
+			return
+		}
+
 		gameReq.players = append(gameReq.players, player)
 
 		// check if game has become full after the player joined

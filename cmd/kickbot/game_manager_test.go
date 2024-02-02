@@ -391,3 +391,55 @@ func TestGameCancellationBeforeTimeout(t *testing.T) {
 	}
 	gm.mu.Unlock()
 }
+
+func TestPlayerCannotJoinGameTwice(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockSlackClient := NewMockSlackClient(ctrl)
+
+	channelId := "test-channel"
+	channel := SlackChannel(channelId)
+	player1 := "test-player-1"
+	player2 := "test-player-2"
+
+	// Expect 1 PostMessage For game creation
+	mockSlackClient.EXPECT().
+		PostMessage(channelId, gomock.Any()).
+		Return("channelID", "timestamp", nil).Times(1)
+
+	// Expect 1 update message for a valid join
+	mockSlackClient.EXPECT().
+		UpdateMessage(channelId, gomock.Any(), gomock.Any()).
+		Return("channelID", "ts", "text", nil).Times(1)
+
+	// Expect 1 PostEphemeral double joining error for player1
+	mockSlackClient.EXPECT().
+		PostEphemeral(channelId, player1, gomock.Any()).
+		Return("timestamp", nil).Times(1)
+
+	// Expect 1 PostEphemeral double joining error for player2
+	mockSlackClient.EXPECT().
+		PostEphemeral(channelId, player2, gomock.Any()).
+		Return("timestamp", nil).Times(1)
+
+	gm := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
+	defer gm.Shutdown()
+
+	// player 1 creates game
+	gm.CreateGame(channel, player1, GameTypeTwoVsTwo)
+	// player 2 double joins
+	gm.JoinGame(channel, player1)
+	// player 2 joins
+	gm.JoinGame(channel, player2)
+	// player 2 joins
+	gm.JoinGame(channel, player2)
+
+	game, exists := gm.getGameRequest(channel)
+	if !exists {
+		t.Error("Game incorrectly deleted")
+	}
+	if numPlayers := len(game.players); numPlayers != 2 {
+		t.Errorf("Expected 2 players in game but found %d", numPlayers)
+	}
+}
