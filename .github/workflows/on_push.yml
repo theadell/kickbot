@@ -4,6 +4,6 @@ on:
 
 jobs:
     build:
-        uses: https://github.com/theadell/kickbot/.github/workflows/build.yml@v1
+        uses: ./build.yml@v1
     release:
-        uses: https://github.com/theadell/kickbot/.github/workflows/release.yml@v1
+        uses: ./release.yml@v1
