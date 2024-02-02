@@ -1,0 +1,7 @@
+on:
+    pull_request:
+        branches: ['main']
+
+jobs:
+    build:
+        uses: https://github.com/theadell/kickbot/.github/workflows/build.yml@v1
