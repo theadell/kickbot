@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-
 	"github.com/slack-go/slack"
+	"strings"
 )
 
 var joinBtn = slack.ButtonBlockElement{
@@ -45,22 +45,24 @@ func NewGameRequestMsg(playerId string, gameType GameType) slack.MsgOption {
 
 func GameRequestUpdateMsg(playerIds []string, quorum int) slack.MsgOption {
 	needed := quorum - len(playerIds)
-	var playerMentions string
-	for _, id := range playerIds {
-		playerMentions += fmt.Sprintf("<@%s> ", id)
+	playerMentions := make([]string, len(playerIds))
+
+	for i, id := range playerIds {
+		playerMentions[i] = fmt.Sprintf("<@%s>", id)
 	}
 
+	playerMentionText := strings.Join(playerMentions, " ")
 	var text string
 	var blocks []slack.Block
 
 	if needed > 0 {
-		text = fmt.Sprintf("%s sind dabei. Noch %d Spieler gesucht!", playerMentions, needed)
+		text = fmt.Sprintf("%s sind dabei. Noch %d Spieler gesucht!", playerMentionText, needed)
 		blocks = []slack.Block{
 			slack.NewSectionBlock(slack.NewTextBlockObject("mrkdwn", text, false, false), nil, nil),
 			actionBlock,
 		}
 	} else {
-		text = fmt.Sprintf("%s sind bereit. Los geht's!", playerMentions)
+		text = fmt.Sprintf("%s sind bereit. Los geht's!", playerMentionText)
 		blocks = []slack.Block{
 			slack.NewSectionBlock(slack.NewTextBlockObject("mrkdwn", text, false, false), nil, nil),
 		}
