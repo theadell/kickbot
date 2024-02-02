@@ -6,5 +6,10 @@ jobs:
     build:
         uses: ./.github/workflows/build.yml
     release:
+        needs: build
         uses: ./.github/workflows/release.yml
+        secrets: inherit
+    deploy:
+        needs: release
+        uses: ./.github/workflows/deploy.yml
         secrets: inherit

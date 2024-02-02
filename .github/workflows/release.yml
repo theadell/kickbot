@@ -7,7 +7,7 @@ on:
                 required: true
 
 env:
-  IMAGE_NAME: adelll/kickbot
+    IMAGE_NAME: adelll/kickbot
 
 jobs:
     release:

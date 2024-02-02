@@ -1,0 +1,30 @@
+on:
+    workflow_call:
+        secrets:
+            SSH_HOST:
+                required: true
+            SSH_USERNAME:
+                required: true
+            SSH_KEY:
+                required: true
+            SSH_PORT:
+                required: true
+
+env:
+    DOCKER_COMPOSE_PATH: path/to/docker-compose
+
+jobs:
+    build:
+        name: Deploy
+        runs-on: ubuntu-latest
+        steps:
+            - name: Docker pull and restart with SSH
+              uses: appleboy/ssh-action@v1.0.3
+              with:
+                  host: ${{ secrets.SSH_HOST }}
+                  username: ${{ secrets.SSH_USERNAME }}
+                  key: ${{ secrets.SSH_KEY }}
+                  port: ${{ secrets.SSH_PORT }}
+                  script: |
+                      cd ${{ env.DOCKER_COMPOSE_PATH }}
+                      docker-compose pull && docker-compose restart --force-recreate || exit 1
