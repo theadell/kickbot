@@ -6,6 +6,9 @@ on:
             DOCKERHUB_TOKEN:
                 required: true
 
+env:
+  IMAGE_NAME: adelll/kickbot
+
 jobs:
     release:
         name: Build and publish Docker image
@@ -23,15 +26,9 @@ jobs:
                   username: ${{ secrets.DOCKERHUB_USERNAME }}
                   password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-            - name: Extract metadata
-              id: meta
-              uses: docker/metadata-action@v4
-              with:
-                  images: "adelll/kickbot"
-
             - name: Build and push
               uses: docker/build-push-action@v5
               with:
-                  tags: ${{ steps.meta.outputs.tags }}
-                  annotations: ${{ steps.meta.outputs.annotations }}
+                  context: .
+                  tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}, ${{ env.IMAGE_NAME }}:latest
                   push: true
