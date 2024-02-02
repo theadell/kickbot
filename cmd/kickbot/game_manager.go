@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -79,6 +81,7 @@ func (gameMgr *GameManager) JoinGame(channel SlackChannel, player string) {
 	var updateMsg slack.MsgOption
 	var gameMsgTS string
 	var isGameComplete bool
+	var players []string
 
 	gameReq, exists := gameMgr.getGameRequest(channel)
 	if !exists {
@@ -109,10 +112,22 @@ func (gameMgr *GameManager) JoinGame(channel SlackChannel, player string) {
 		isGameComplete = len(gameReq.players) == gameReq.quorum
 		gameMsgTS = gameReq.messageTs
 		updateMsg = GameRequestUpdateMsg(gameReq.players, gameReq.quorum)
+		players = slices.Clone(gameReq.players)
 	}
 	gameReq.mu.Unlock()
 
 	if isGameComplete {
+		var playerString = "<@" + strings.Join(players, ">, <@") + ">"
+		var gameStartMessage = fmt.Sprintf("Die Runde ist voll, %s zum Kickertisch! :kicker:", playerString)
+		var wg sync.WaitGroup
+		wg.Add(len(players))
+		for _, playerId := range players {
+			go func(playerId string){
+				gameMgr.apiClient.PostEphemeral(string(channel), playerId, slack.MsgOptionText(gameStartMessage, false))
+				wg.Done()
+			}(playerId)
+		}
+		wg.Wait()
 		gameMgr.deleteGameRequest(channel)
 	}
 

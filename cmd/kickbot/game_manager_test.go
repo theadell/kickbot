@@ -91,7 +91,7 @@ func TestConcurrentJoins(t *testing.T) {
 	nJoins := 10
 
 	// A game with a quorom of 4 should send one "PostMessage" and 3 "UpdateMessage"
-	// 1 for the game announcement and 3 for each player Join
+	// 1 for the game announcement and 3 for each player Join + 4 when the game is full
 
 	mockSlackClient.EXPECT().
 		PostMessage(gomock.Any(), gomock.Any()).
@@ -103,7 +103,7 @@ func TestConcurrentJoins(t *testing.T) {
 
 	mockSlackClient.EXPECT().
 		PostEphemeral(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return("timestamp", nil).MaxTimes(nJoins - quorom + 1)
+		Return("timestamp", nil).MaxTimes(nJoins + 1)
 
 	gm := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
 
@@ -189,19 +189,19 @@ func TestConcurrentLeavesAndJoins(t *testing.T) {
 	playersToLeave := []string{"p1", "p3"}
 	playersToJoin := []string{"p4", "p5", "p6"}
 
-	// Best Case Scenario 2 players leave, 3 pleyers join and we reach quorum of 4 -> 5 updates
+	// Best Case Scenario 2 players leave, 3 players join and we reach quorum of 4 -> 5 updates
 	mockSlackClient.EXPECT().
 		UpdateMessage(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return("channelID", "ts", "text", nil).MaxTimes(5)
 
-	// Worse case Scenario: 1 plyer joins before the other 2 leave, we reach quorum and game is deleted
+	// Worse case Scenario: 1 player joins before the other 2 leave, we reach quorum and game is deleted
 	// the 2 other players to join and the 2 to leave all get error messages
 	mockSlackClient.EXPECT().
 		DeleteMessage(gomock.Any(), gomock.Any()).
 		Return("ch", "ts", nil).MaxTimes(1)
 	mockSlackClient.EXPECT().
 		PostEphemeral(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return("timestamp", nil).MaxTimes(4)
+		Return("timestamp", nil).MaxTimes(8)
 
 	gm := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
 
@@ -339,6 +339,11 @@ func TestGameCompletionBeforeTimeout(t *testing.T) {
 	mockSlackClient.EXPECT().
 		UpdateMessage(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return("channelID", "ts", "text", nil).MaxTimes(2)
+
+	// Ephemeral message to every player that joined the game
+	mockSlackClient.EXPECT().
+		PostEphemeral(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("timestamp", nil).Times(2)
 
 	// No Deletion Should Happen
 	mockSlackClient.EXPECT().
