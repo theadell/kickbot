@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/slack-go/slack"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -142,4 +144,112 @@ func TestSlashCommandHandlerWithInvalidCommands(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSlackInteractionCallbackHandler(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockSlackClient := NewMockSlackClient(ctrl)
+
+	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
+	defer gameMgr.Shutdown()
+
+	channelID := "test-channel"
+	channel := SlackChannel(channelID)
+	player := "test-p2"
+
+	// Expect a post for the game creation
+	mockSlackClient.EXPECT().
+		PostMessage(channelID, gomock.Any()).
+		Times(1)
+
+	// Expect 2 UpdateMessage for 1 join and 1 leave
+	mockSlackClient.EXPECT().
+		UpdateMessage(channelID, gomock.Any(), gomock.Any()).
+		Return("channelID", "ts", "text", nil).MaxTimes(2)
+
+	gameMgr.CreateGame(channel, "unique-test-p1", GameTypeTwoVsTwo)
+
+	tests := []struct {
+		name           string
+		actionID       string
+		expectHTTPCode int
+		hasRequestBody bool
+		hasActions     bool
+	}{
+		{
+			name:           "Valid Join Round Action",
+			actionID:       ACTION_JOIN_ROUND,
+			expectHTTPCode: http.StatusOK,
+			hasRequestBody: true,
+			hasActions:     true,
+		},
+		{
+			name:           "Valid Leave Round Action",
+			actionID:       ACTION_LEAVE_ROUND,
+			expectHTTPCode: http.StatusOK,
+			hasRequestBody: true,
+			hasActions:     true,
+		},
+		{
+			name:           "Invalid Action 1",
+			actionID:       "INVALID_ACTION_1",
+			expectHTTPCode: http.StatusBadRequest,
+			hasRequestBody: true,
+			hasActions:     true,
+		},
+		{
+			name:           "Invalid Action 2",
+			actionID:       "INVALID_ACTION_2",
+			expectHTTPCode: http.StatusBadRequest,
+			hasRequestBody: true,
+			hasActions:     true,
+		},
+		{
+			name:           "No Request Body",
+			actionID:       "",
+			expectHTTPCode: http.StatusBadRequest,
+			hasRequestBody: false,
+			hasActions:     false,
+		},
+		{
+			name:           "Empty Block Actions",
+			actionID:       "",
+			expectHTTPCode: http.StatusBadRequest,
+			hasRequestBody: true,
+			hasActions:     false,
+		},
+	}
+
+	// Loop through each test case
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Set up the request body if necessary
+			var requestBody = strings.NewReader("")
+			if tc.hasRequestBody {
+				callback := slack.InteractionCallback{}
+				callback.Channel.ID = channelID
+				callback.User.ID = player
+				if tc.hasActions {
+					callback.ActionCallback.BlockActions = []*slack.BlockAction{{ActionID: tc.actionID}}
+				}
+				payload, _ := json.Marshal(callback)
+				form := url.Values{}
+				form.Set("payload", string(payload))
+				requestBody = strings.NewReader(form.Encode())
+			}
+			req := httptest.NewRequest(http.MethodPost, "/events", requestBody)
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+			rr := httptest.NewRecorder()
+
+			handleSlackEvent(gameMgr)(rr, req)
+
+			if rr.Result().StatusCode != tc.expectHTTPCode {
+				t.Errorf("Status code returned, %d, did not match expected code %d", rr.Result().StatusCode, tc.expectHTTPCode)
+			}
+		})
+	}
+
 }

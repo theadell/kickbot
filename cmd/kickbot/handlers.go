@@ -38,14 +38,14 @@ func handleSlackEvent(gm *GameManager) http.HandlerFunc {
 		var interactionCallback slack.InteractionCallback
 
 		if err := json.Unmarshal([]byte(r.FormValue("payload")), &interactionCallback); err != nil {
-			slog.Error("Failed to decode interaction body", "error", err.Error())
+			slog.Warn("Failed to decode interaction body", "error", err.Error())
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
 		actions := interactionCallback.ActionCallback.BlockActions
 		if len(actions) < 1 {
-			slog.Error("Invalid or empty block action callback", "payload", interactionCallback)
+			slog.Warn("Invalid or empty block action callback", "payload", interactionCallback)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}

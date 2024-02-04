@@ -1,0 +1,112 @@
+direction: right
+u1: Alice {
+  width: 100
+}
+u2: Bob {
+  width: 100
+}
+
+sw: Slack Workspace {
+  ch1: channel 01 {
+    height: 250
+  }
+  ch2: channel 02
+  chn: channel ...
+}
+
+kickbot: {
+  direction: down
+  api: '' {
+    shape: image
+    icon: "https://icons.terrastruct.com/dev%2Fgo.svg"
+  }
+  endpoints: {
+    width: 240
+    style: {
+      stroke-dash: 3
+    }
+    commands: /commands {
+      width: 140
+      height: 60
+    }
+    events: /events {
+      width: 140
+      height: 60
+    }
+  }
+  bg: Background jobs {
+    icon: "https://icons.terrastruct.com/essentials%2F033-repeat.svg"
+    width: 240
+    style: {
+      stroke-dash: 3
+    }
+  }
+}
+
+api: Slack Api {
+  icon: "https://icons.terrastruct.com/dev%2Fslack.svg"
+  # width: 400
+  height: 400
+}
+kickbot.bg -> api: Reminders, Notifications and cleanup {
+  style: {
+    font-color: black
+    font-size: 20
+  }
+}
+
+u1 -> sw.ch1: /command (e.g. /kicker) {
+  style: {
+    font-color: black
+    font-size: 20
+  }
+}
+sw.ch1 -> api: Command to be proceed by slack API {
+  style: {
+    font-color: black
+    font-size: 20
+  }
+}
+api -> kickbot.endpoints.commands: Command with Context as webhook {
+  style: {
+    font-color: black
+    font-size: 20
+  }
+}
+kickbot.endpoints.commands -> api: Interactive Message {
+  style: {
+    font-color: black
+    font-size: 20
+  }
+}
+api -> sw.ch1: Push/Update/Delete/Schedule Messages {
+  style: {
+    font-color: black
+    font-size: 20
+  }
+}
+api -> sw.chn: Push/Update/Delete/Schedule Messages {
+  style: {
+    font-color: black
+    font-size: 20
+  }
+}
+
+u2 -> sw.ch1: Interaction (e.g. Botton clicked) {
+  style: {
+    font-color: black
+    font-size: 20
+  }
+}
+sw.ch1 -> api: Interaction processed by slack API {
+  style: {
+    font-color: black
+    font-size: 20
+  }
+}
+api -> kickbot.endpoints.events: Events & Interaction Callback with context as webhook {
+  style: {
+    font-color: black
+    font-size: 20
+  }
+}
