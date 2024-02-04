@@ -1,5 +1,11 @@
+name: Deploy
+
 on:
     workflow_call:
+        inputs:
+            DOCKER_COMPOSE_PATH:
+                required: true
+                type: string
         secrets:
             SSH_HOST:
                 required: true
@@ -10,15 +16,11 @@ on:
             SSH_PORT:
                 required: true
 
-env:
-    DOCKER_COMPOSE_PATH: /opt/docker/kickbot
-
 jobs:
-    build:
-        name: Deploy
+    deploy:
         runs-on: ubuntu-latest
         steps:
-            - name: Docker pull and restart with SSH
+            - name: Redeploy Docker
               uses: appleboy/ssh-action@v1.0.3
               with:
                   host: ${{ secrets.SSH_HOST }}
@@ -26,5 +28,5 @@ jobs:
                   key: ${{ secrets.SSH_KEY }}
                   port: ${{ secrets.SSH_PORT }}
                   script: |
-                      cd ${{ env.DOCKER_COMPOSE_PATH }}
+                      cd ${{ inputs.DOCKER_COMPOSE_PATH }}
                       docker compose pull && docker compose restart || exit 1
