@@ -14,21 +14,21 @@ func SlackVerifyMiddleware(signingSecret string) func(http.Handler) http.Handler
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			verifier, err := slack.NewSecretsVerifier(r.Header, signingSecret)
 			if err != nil {
-				slog.Error("Error Creating verifier", "error", err.Error())
-				w.WriteHeader(http.StatusBadRequest)
+				slog.Warn("Failed to create verifier", "error", err.Error())
+				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
 
 			bodyBytes, err := io.ReadAll(r.Body)
 			if err != nil {
-				slog.Error("Error reading request body", "error", err.Error())
+				slog.Warn("Failed to read request body", "error", err.Error())
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 
 			if _, err := verifier.Write(bodyBytes); err != nil {
-				slog.Info("Error writing body to verifier", "error", err.Error())
-				w.WriteHeader(http.StatusInternalServerError)
+				slog.Warn("failed to write body to verifier", "error", err.Error())
+				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 

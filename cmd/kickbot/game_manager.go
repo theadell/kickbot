@@ -122,7 +122,7 @@ func (gameMgr *GameManager) JoinGame(channel SlackChannel, player string) {
 		var wg sync.WaitGroup
 		wg.Add(len(players))
 		for _, playerId := range players {
-			go func(playerId string){
+			go func(playerId string) {
 				gameMgr.apiClient.PostEphemeral(string(channel), playerId, slack.MsgOptionText(gameStartMessage, false))
 				wg.Done()
 			}(playerId)
