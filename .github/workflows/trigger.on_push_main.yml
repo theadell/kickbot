@@ -4,30 +4,24 @@ on:
     push:
         branches: ["main"]
 
-env:
-    DOCKER_IMAGE_NAME: adelll/kickbot
-    DOCKER_COMPOSE_PATH: /opt/docker/kickbot
-    GO_VERSION: "1.21"
-
 jobs:
     build:
         uses: ./.github/workflows/job.build.yml
         with:
-            GO_VERSION: ${{ env.GO_VERSION }}
+            GO_VERSION: ${{ vars.GO_VERSION }}
     release:
         needs: build
         uses: ./.github/workflows/job.release.yml
         with:
-            DOCKER_COMPOSE_PATH: ${{ env.DOCKER_COMPOSE_PATH }}
+            DOCKER_IMAGE_NAME: ${{ vars.DOCKER_IMAGE_NAME }}
+            DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
         secrets:
-            DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
             DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     deploy:
         needs: release
         uses: ./.github/workflows/job.deploy.yml
-        with:
-            DOCKER_IMAGE_NAME: ${{ env.DOCKER_IMAGE_NAME }}
         secrets:
+            DOCKER_COMPOSE_PATH: ${{ secrets.DOCKER_COMPOSE_PATH }}
             SSH_HOST: ${{ secrets.SSH_HOST }}
             SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
             SSH_KEY: ${{ secrets.SSH_KEY }}
