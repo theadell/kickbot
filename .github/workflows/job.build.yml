@@ -1,18 +1,22 @@
+name: Build
+
 on:
     workflow_call:
-
+        inputs:
+            GO_VERSION:
+                required: true
+                type: string
 jobs:
     build:
-        name: Build and test Golang App
         runs-on: ubuntu-latest
         steps:
-            - name: Check out the repo
+            - name: Checkout Repository
               uses: actions/checkout@v4
 
             - name: Setup Go
               uses: actions/setup-go@v4
               with:
-                  go-version: '1.21'
+                  go-version: ${{ inputs.GO_VERSION }}
 
             - name: Build
               run: go build -v ./...

@@ -1,0 +1,14 @@
+name: Trigger PR (main)
+
+on:
+    pull_request:
+        branches: ["main"]
+
+env:
+    GO_VERSION: "1.21"
+
+jobs:
+    build:
+        uses: ./.github/workflows/job.build.yml
+        with:
+            GO_VERSION: ${{ env.GO_VERSION }}
