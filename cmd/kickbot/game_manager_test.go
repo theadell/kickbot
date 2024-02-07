@@ -44,7 +44,7 @@ func TestConcurrentGameCreationForSingleChannel(t *testing.T) {
 
 	var wg sync.WaitGroup
 	numberOfAttempts := 50
-	for i := 0; i < numberOfAttempts; i++ {
+	for i := range numberOfAttempts {
 		wg.Add(1)
 		go func(userID string) {
 			defer wg.Done()
@@ -84,7 +84,7 @@ func TestConcurrentGameCreationForMultipleChannels(t *testing.T) {
 
 	var wg sync.WaitGroup
 	numberOfAttempts := 10
-	for i := 0; i < numberOfAttempts; i++ {
+	for i := range numberOfAttempts {
 		wg.Add(1)
 		go func(userID string) {
 			defer wg.Done()
@@ -141,7 +141,7 @@ func TestConcurrentJoins(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	for i := 0; i < nJoins; i++ {
+	for i := range nJoins {
 		userID := fmt.Sprintf("user%d", i)
 		wg.Add(1)
 		go func(userID string) {
@@ -355,7 +355,7 @@ func TestGameReqTimeout(t *testing.T) {
 		Return("ch", "ts", nil).MaxTimes(nGames)
 
 	gameMgr := NewGameManager(mockSlackClient, time.Millisecond*100)
-	for i := 0; i < nGames; i++ {
+	for i := range nGames {
 		gameMgr.CreateGame(SlackChannel(fmt.Sprintf("channel-%d", i)), "test", GameTypeTwoVsTwo)
 	}
 	time.Sleep(125 * time.Millisecond)

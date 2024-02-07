@@ -1,17 +1,19 @@
-FROM --platform=linux/amd64 golang:1.21-alpine as builder
+FROM golang:1.22.0-alpine3.19 as builder
 
 WORKDIR /app
 
+RUN apk --no-cache add ca-certificates
+
 COPY go.mod go.sum ./
-RUN go mod download
+RUN go mod download 
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o kickbot ./cmd/kickbot/
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o kickbot ./cmd/kickbot/
 
-FROM --platform=linux/amd64 alpine:3.19
+FROM alpine:3.19.1
 
-RUN apk --no-cache add ca-certificates
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 COPY --from=builder /app/kickbot /kickbot
 
