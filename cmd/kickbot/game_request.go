@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -19,11 +20,12 @@ var quorumMap = map[GameType]int{
 }
 
 type GameRequest struct {
-	players   []string
-	quorum    int         // number of players needed for the game
-	messageTs string      // slack timestamp for the message of the game request sent by the bot
-	timer     *time.Timer // Timeout timer
-	mu        *sync.Mutex
+	players         []string
+	quorum          int         // number of players needed for the game
+	messageTs       string      // slack timestamp for the message of the game request sent by the bot
+	timer           *time.Timer // Timeout timer
+	timerCancelFunc context.CancelFunc
+	mu              *sync.Mutex
 }
 
 func NewGameRequest(gameType GameType, player string) *GameRequest {
