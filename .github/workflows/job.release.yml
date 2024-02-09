@@ -44,7 +44,7 @@ jobs:
               run: |
                   latest_repo_version=$(echo "${{steps.get_tags.outputs.tags_json }}" | grep -oP '"name":"\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -n 1)
                   latest_version=$(printf '%s\n' "$latest_repo_version" "${{ inputs.TAG }}" | sort -V | tail -n 1 )
-                  if [[ "${{ inputs.TAG }}" == "$latest" ]]; then
+                  if [[ "${{ inputs.TAG }}" == "$latest_version" ]]; then
                       echo "latest=${{ inputs.DOCKER_IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
                   fi
 
