@@ -355,6 +355,8 @@ func TestGameReqTimeout(t *testing.T) {
 		Return("ch", "ts", nil).MaxTimes(nGames)
 
 	gameMgr := NewGameManager(mockSlackClient, time.Millisecond*100)
+	defer gameMgr.Shutdown()
+
 	for i := range nGames {
 		gameMgr.CreateGame(SlackChannel(fmt.Sprintf("channel-%d", i)), "test", GameTypeTwoVsTwo)
 	}
@@ -393,6 +395,7 @@ func TestGameCompletionBeforeTimeout(t *testing.T) {
 		Return("ch", "ts", nil).Times(0)
 
 	gameMgr := NewGameManager(mockSlackClient, 100*time.Millisecond)
+	defer gameMgr.Shutdown()
 	channel := SlackChannel("test-channel")
 
 	time.Sleep(50 * time.Millisecond)
@@ -424,6 +427,8 @@ func TestGameCancellationBeforeTimeout(t *testing.T) {
 		Return("ch", "ts", nil).Times(1)
 
 	gameMgr := NewGameManager(mockSlackClient, 100*time.Millisecond)
+	defer gameMgr.Shutdown()
+
 	channel := SlackChannel("test-channel")
 	player := "test-player"
 	gameMgr.CreateGame(channel, player, GameTypeTwoVsTwo)
@@ -513,7 +518,6 @@ func TestUserCannotLeaveGameRequestTheyNotPartOf(t *testing.T) {
 	mockSlackClient.EXPECT().
 		PostEphemeral(channelId, leaver, gomock.Any()).
 		Return("timestamp", nil).Times(1)
-
 	gameMgr.CreateGame(channel, gameMaker, GameTypeOneVsOne)
 	gameMgr.LeaveGame(channel, leaver)
 
@@ -521,7 +525,6 @@ func TestUserCannotLeaveGameRequestTheyNotPartOf(t *testing.T) {
 	if numPlayers := len(gameRequest.players); numPlayers != 1 {
 		t.Errorf("Expected to find 1 player in game request but found %d", numPlayers)
 	}
-
 }
 
 func TestUserCannotLeaveOrJoinGameRequestThatDoesntExist(t *testing.T) {
@@ -582,4 +585,54 @@ func TestGameCreationFailure(t *testing.T) {
 		t.Errorf("Expected no game requests but found %d", len(gameMgr.gameRequests))
 	}
 
+}
+
+func TestGameCompletionNotification(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockSlackClient := NewMockSlackClient(ctrl)
+	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
+	defer gameMgr.Shutdown()
+
+	channelID := "12345678"
+	channel := SlackChannel(channelID)
+	p1, p2, p3, p4 := "p1", "p2", "p3", "p4"
+
+	// Game annonciation
+	mockSlackClient.EXPECT().
+		PostMessage(channelID, gomock.Any()).
+		Return("channelID", "timestamp", nil).Times(1)
+
+	// update on each join
+	mockSlackClient.EXPECT().
+		UpdateMessage(channelID, gomock.Any(), gomock.Any()).
+		Return("channelID", "ts", "text", nil).Times(3)
+
+	// 4 notifications
+	mockSlackClient.EXPECT().
+		PostEphemeral(channelID, p1, gomock.Any()).
+		Return("timestamp", nil).MaxTimes(1)
+	mockSlackClient.EXPECT().
+		PostEphemeral(channelID, p2, gomock.Any()).
+		Return("timestamp", nil).MaxTimes(1)
+	mockSlackClient.EXPECT().
+		PostEphemeral(channelID, p3, gomock.Any()).
+		Return("timestamp", nil).MaxTimes(1)
+	mockSlackClient.EXPECT().
+		PostEphemeral(channelID, p4, gomock.Any()).
+		Return("timestamp", nil).MaxTimes(1)
+
+	// should trigger 1 "PostMessage"
+	gameMgr.CreateGame(SlackChannel(channelID), p1, GameTypeTwoVsTwo)
+	// should trigger 3 updates
+	gameMgr.JoinGame(channel, p2)
+	gameMgr.JoinGame(channel, p3)
+	gameMgr.JoinGame(channel, p4)
+
+	gameMgr.mu.Lock()
+	if len(gameMgr.gameRequests) != 0 {
+		t.Errorf("Expected all games to be deleted, but found %d games", len(gameMgr.gameRequests))
+	}
+	gameMgr.mu.Unlock()
 }

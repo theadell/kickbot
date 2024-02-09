@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -66,8 +67,15 @@ func (gameMgr *GameManager) CreateGame(channel SlackChannel, player string, game
 
 	gameReq.mu.Lock()
 	gameReq.messageTs = ts
+	ctx, cancel := context.WithCancel(context.Background())
+	gameReq.timerCancelFunc = cancel
 	gameReq.timer = time.AfterFunc(gameMgr.timeoutDuration, func() {
-		gameMgr.timeoutChan <- channel
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			gameMgr.timeoutChan <- channel
+		}
 	})
 	gameReq.mu.Unlock()
 
@@ -123,7 +131,10 @@ func (gameMgr *GameManager) JoinGame(channel SlackChannel, player string) {
 		wg.Add(len(players))
 		for _, playerId := range players {
 			go func(playerId string) {
-				gameMgr.apiClient.PostEphemeral(string(channel), playerId, slack.MsgOptionText(gameStartMessage, false))
+				_, err := gameMgr.apiClient.PostEphemeral(string(channel), playerId, slack.MsgOptionText(gameStartMessage, false))
+				if err != nil {
+					slog.Error("Failed to ping user", "userid", playerId, "error", err.Error())
+				}
 				wg.Done()
 			}(playerId)
 		}
@@ -243,5 +254,10 @@ func (gameMgr *GameManager) handleTimeouts() {
 
 // Shutdown closes the timeout channel and releases all used resources
 func (gameMgr *GameManager) Shutdown() {
+	for _, gameReq := range gameMgr.gameRequests {
+		if gameReq.timerCancelFunc != nil {
+			gameReq.timerCancelFunc()
+		}
+	}
 	close(gameMgr.timeoutChan)
 }
