@@ -3,6 +3,9 @@ name: Release
 on:
     workflow_call:
         inputs:
+            TAG:
+                required: true
+                type: string
             DOCKER_IMAGE_NAME:
                 required: true
                 type: string
@@ -16,6 +19,59 @@ jobs:
     release:
         runs-on: ubuntu-latest
         steps:
+            - name: Get version numbers of ${{ inputs.TAG }}
+              id: get_versions
+              run: |
+                  major=$(echo "${{ inputs.TAG }}" | sed -n -e "s/^\([0-9]*\).*$/\1/p")
+                  minor=$(echo "${{ inputs.TAG }}" | sed -n -e "s/^[0-9]*\.\([0-9]*\).*$/\1/p")
+                  patch=$(echo "${{ inputs.TAG }}" | sed -n -e "s/^[0-9]*\.[0-9]*\.\([0-9]*\).*$/\1/p")
+
+                  if [[ "${{ inputs.TAG }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                    echo "major=$major" >> $GITHUB_OUTPUT
+                    echo "minor=$minor" >> $GITHUB_OUTPUT
+                    echo "patch=$patch" >> $GITHUB_OUTPUT
+                  else
+                    echo "::error Tag does not match pattern ^[0-9]+\.[0-9]+\.[0-9]+$"
+                  fi
+
+            - name: Fetch versions from ${{ inputs.DOCKER_IMAGE_NAME }}
+              id: get_tags
+              run: |
+                  echo "tags_json=$(curl -s 'https://hub.docker.com/v2/repositories/${{ inputs.DOCKER_IMAGE_NAME }}/tags')" >> $GITHUB_OUTPUT
+
+            - name: Check if ${{ inputs.TAG }} is latest release
+              id: check_latest
+              run: |
+                  latest_repo_version=$(echo "${{steps.get_tags.outputs.tags_json }}" | grep -oP '"name":"\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -n 1)
+                  latest_version=$(printf '%s\n' "$latest_repo_version" "${{ inputs.TAG }}" | sort -V | tail -n 1 )
+                  if [[ "${{ inputs.TAG }}" == "$latest" ]]; then
+                      echo "latest=${{ inputs.DOCKER_IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
+                  fi
+
+            - name: Check if ${{ inputs.TAG }} is major release
+              id: check_major
+              run: |
+                  latest_repo_version_of_current_major=$(echo "$tags_json" | grep -oP '"name":"\K${{ steps.get_versions.outputs.major }}\.[0-9]+\.[0-9]+' | sort -V | tail -n 1)
+                  latest_version_of_current_major=$(printf '%s\n' "$latest_repo_version_of_current_major" "${{ inputs.TAG }}" | sort -V | tail -n 1 )
+                  if [[ "${{ inputs.TAG }}" == "$latest_version_of_current_major" ]]; then
+                      echo "major=${{ inputs.DOCKER_IMAGE_NAME }}:${{ steps.get_versions.outputs.major}}" >> $GITHUB_OUTPUT
+                  fi
+
+            - name: Check if ${{ inputs.TAG }} is minor release
+              id: check_minor
+              run: |
+                  latest_repo_version_of_current_major_minor=$(echo "$tags_json" | grep -oP '"name":"\K${{ steps.get_versions.outputs.major}}\.${{ steps.get_versions.outputs.minor}}\.[0-9]+' | sort -V | tail -n 1)
+                  latest_version_of_current_major_minor=$(printf '%s\n' "$latest_repo_version_of_current_major_minor" "${{ inputs.TAG }}" | sort -V | tail -n 1 )
+                  if [[ "${{ inputs.TAG }}" == "$latest_version_of_current_major_minor" ]]; then
+                      echo "minor=${{ inputs.DOCKER_IMAGE_NAME }}:${{ steps.get_versions.outputs.major }}.${{ steps.get_versions.outputs.minor }}" >> $GITHUB_OUTPUT
+                  fi
+
+            - name: Determine short SHA tag
+              id: short_sha
+              run: |
+                  short_sha=$(echo ${GITHUB_SHA} | cut -c1-8)
+                  echo "short_sha=${{ inputs.DOCKER_IMAGE_NAME }}:$short_sha" >> $GITHUB_OUTPUT
+
             - name: Checkout Repository
               uses: actions/checkout@v4
 
@@ -32,5 +88,10 @@ jobs:
               uses: docker/build-push-action@v5
               with:
                   context: .
-                  tags: ${{ inputs.DOCKER_IMAGE_NAME }}:${{ github.sha }}, ${{ inputs.DOCKER_IMAGE_NAME }}:latest
+                  tags: |
+                    ${{ inputs.docker_image_name }}:${{ inputs.tag }}
+                    ${{ steps.short_sha.outputs.short_sha }}
+                    ${{ steps.check_latest.outputs.latest }}
+                    ${{ steps.check_major.outputs.major }}
+                    ${{ steps.check_minor.outputs.minor }}
                   push: true

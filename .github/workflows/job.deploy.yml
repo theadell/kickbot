@@ -2,11 +2,9 @@ name: Deploy
 
 on:
     workflow_call:
-        inputs:
+        secrets:
             DOCKER_COMPOSE_PATH:
                 required: true
-                type: string
-        secrets:
             SSH_HOST:
                 required: true
             SSH_USERNAME:
@@ -28,5 +26,5 @@ jobs:
                   key: ${{ secrets.SSH_KEY }}
                   port: ${{ secrets.SSH_PORT }}
                   script: |
-                      cd ${{ inputs.DOCKER_COMPOSE_PATH }}
+                      cd ${{ secrets.DOCKER_COMPOSE_PATH }}
                       docker compose pull && docker compose restart || exit 1
