@@ -20,7 +20,6 @@ func TestSlashCommandHandlerWithValidCommands(t *testing.T) {
 	mockSlackClient := NewMockSlackClient(ctrl)
 
 	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
-	defer gameMgr.Shutdown()
 
 	testCases := []struct {
 		channelID string
@@ -80,9 +79,6 @@ func TestSlashCommandHandlerWithInvalidCommands(t *testing.T) {
 
 	mockSlackClient := NewMockSlackClient(ctrl)
 
-	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
-	defer gameMgr.Shutdown()
-
 	testCases := []struct {
 		channelID string
 		command   string
@@ -114,7 +110,6 @@ func TestSlashCommandHandlerWithInvalidCommands(t *testing.T) {
 				Times(0)
 
 			gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
-			defer gameMgr.Shutdown()
 
 			formData := url.Values{
 				"token":           {"mock-token"},
@@ -153,7 +148,6 @@ func TestSlackInteractionCallbackHandler(t *testing.T) {
 	mockSlackClient := NewMockSlackClient(ctrl)
 
 	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
-	defer gameMgr.Shutdown()
 
 	channelID := "test-channel"
 	channel := SlackChannel(channelID)

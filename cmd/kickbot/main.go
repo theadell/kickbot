@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -29,7 +33,7 @@ func main() {
 	}
 
 	// Game Manager
-	gm := NewGameManager(slack.New(token), DEFAULT_GAMEREQ_TIMEOUT)
+	gameMgr := NewGameManager(slack.New(token), DEFAULT_GAMEREQ_TIMEOUT)
 	// Routes
 	r := chi.NewRouter()
 
@@ -38,8 +42,8 @@ func main() {
 	r.Use(middleware.RealIP)
 	r.Use(SlackVerifyMiddleware(signingSecret))
 
-	r.HandleFunc("/commands", handleSlackCommand(gm))
-	r.HandleFunc("/events", handleSlackEvent(gm))
+	r.HandleFunc("/commands", handleSlackCommand(gameMgr))
+	r.HandleFunc("/events", handleSlackEvent(gameMgr))
 
 	// Server
 	srv := &http.Server{
@@ -51,6 +55,27 @@ func main() {
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	slog.Info(fmt.Sprintf("Server running on port %s", *port))
-	log.Fatal(srv.ListenAndServe())
+	shutdownChan := make(chan os.Signal, 1)
+	signal.Notify(shutdownChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		slog.Info(fmt.Sprintf("Server running on port %s", *port))
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	shutdownSignal := <-shutdownChan
+
+	log.Printf("Shutdown signal (%s) received, shutting down gracefully...\n", shutdownSignal)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		slog.Error("HTTP Server failed to shutdown gracefully", "error", err.Error())
+	}
+	slog.Info("HTTP Server successfully shutdown")
+	gameMgr.Shutdown(ctx)
+	slog.Info("Game Manager successfully shutdown")
+	slog.Info("Shutdown complete. Server exiting.")
 }
