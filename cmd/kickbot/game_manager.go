@@ -253,11 +253,42 @@ func (gameMgr *GameManager) handleTimeouts() {
 }
 
 // Shutdown closes the timeout channel and releases all used resources
-func (gameMgr *GameManager) Shutdown() {
-	for _, gameReq := range gameMgr.gameRequests {
+func (gameMgr *GameManager) Shutdown(ctx context.Context) {
+	var wg sync.WaitGroup
+
+	gameReqCancels := make([]struct {
+		channel   string
+		messageTs string
+	}, 0)
+
+	gameMgr.mu.Lock()
+	for channel, gameReq := range gameMgr.gameRequests {
 		if gameReq.timerCancelFunc != nil {
 			gameReq.timerCancelFunc()
 		}
+		gameReqCancels = append(gameReqCancels, struct {
+			channel   string
+			messageTs string
+		}{
+			channel:   string(channel),
+			messageTs: gameReq.messageTs,
+		})
 	}
+	clear(gameMgr.gameRequests)
+	gameMgr.mu.Unlock()
+
 	close(gameMgr.timeoutChan)
+
+	for _, gr := range gameReqCancels {
+		wg.Add(1)
+		go func(channel, ts string) {
+			defer wg.Done()
+			_, _, err := gameMgr.apiClient.DeleteMessageContext(ctx, channel, ts)
+			if err != nil {
+				slog.Warn("Failed to delete game message on shutdown", "error", err.Error())
+			}
+		}(gr.channel, gr.messageTs)
+	}
+
+	wg.Wait()
 }

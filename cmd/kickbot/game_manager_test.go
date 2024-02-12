@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -29,7 +30,7 @@ func TestConcurrentGameCreationForSingleChannel(t *testing.T) {
 	mockSlackClient := NewMockSlackClient(ctrl)
 
 	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
-	defer gameMgr.Shutdown()
+	defer gameMgr.Shutdown(context.TODO())
 
 	// A channel can only have a single active game request. when a game is created a message is sent to the channel when `PostMessage` is invoked
 	// when other users try to create a new game request in the same channel they will recieve an ephemeral error message when `PostEphemeral` is invoked
@@ -41,6 +42,9 @@ func TestConcurrentGameCreationForSingleChannel(t *testing.T) {
 	mockSlackClient.EXPECT().
 		PostEphemeral(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return("timestamp", nil).AnyTimes()
+
+	// Shutdown should cleanup and delete any trailing game requests (which should be exactly 1 game)
+	mockSlackClient.EXPECT().DeleteMessageContext(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 
 	var wg sync.WaitGroup
 	numberOfAttempts := 50
@@ -110,7 +114,7 @@ func TestConcurrentJoins(t *testing.T) {
 
 	mockSlackClient := NewMockSlackClient(ctrl)
 	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
-	defer gameMgr.Shutdown()
+	defer gameMgr.Shutdown(context.TODO())
 
 	quorom := 4
 	nJoins := 10
@@ -168,7 +172,7 @@ func TestConcurrentLeaves(t *testing.T) {
 
 	mockSlackClient := NewMockSlackClient(ctrl)
 	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
-	defer gameMgr.Shutdown()
+	defer gameMgr.Shutdown(context.TODO())
 
 	mockSlackClient.EXPECT().
 		UpdateMessage(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -221,7 +225,7 @@ func TestConcurrentLeavesAndJoins(t *testing.T) {
 	playersToJoin := []string{"p4", "p5", "p6"}
 
 	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
-	defer gameMgr.Shutdown()
+	defer gameMgr.Shutdown(context.TODO())
 
 	// Case Scenario I : 2 players leave THEN 3 players join and we reach quorum of 4
 	// EXPECT 5 updates for each leave and join actions. 4 notifications (PostEphemeral) for each player when game reaches quorum
@@ -282,7 +286,6 @@ func TestConcurrentLeaveAndJoin(t *testing.T) {
 
 	mockSlackClient := NewMockSlackClient(ctrl)
 	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
-	defer gameMgr.Shutdown()
 
 	channel := "lpzg-24"
 
@@ -355,7 +358,7 @@ func TestGameReqTimeout(t *testing.T) {
 		Return("ch", "ts", nil).MaxTimes(nGames)
 
 	gameMgr := NewGameManager(mockSlackClient, time.Millisecond*100)
-	defer gameMgr.Shutdown()
+	defer gameMgr.Shutdown(context.TODO())
 
 	for i := range nGames {
 		gameMgr.CreateGame(SlackChannel(fmt.Sprintf("channel-%d", i)), "test", GameTypeTwoVsTwo)
@@ -395,7 +398,7 @@ func TestGameCompletionBeforeTimeout(t *testing.T) {
 		Return("ch", "ts", nil).Times(0)
 
 	gameMgr := NewGameManager(mockSlackClient, 100*time.Millisecond)
-	defer gameMgr.Shutdown()
+	defer gameMgr.Shutdown(context.TODO())
 	channel := SlackChannel("test-channel")
 
 	time.Sleep(50 * time.Millisecond)
@@ -427,7 +430,7 @@ func TestGameCancellationBeforeTimeout(t *testing.T) {
 		Return("ch", "ts", nil).Times(1)
 
 	gameMgr := NewGameManager(mockSlackClient, 100*time.Millisecond)
-	defer gameMgr.Shutdown()
+	defer gameMgr.Shutdown(context.TODO())
 
 	channel := SlackChannel("test-channel")
 	player := "test-player"
@@ -477,7 +480,6 @@ func TestPlayerCannotJoinGameTwice(t *testing.T) {
 		Return("timestamp", nil).Times(1)
 
 	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
-	defer gameMgr.Shutdown()
 
 	// player 1 creates game
 	gameMgr.CreateGame(channel, player1, GameTypeTwoVsTwo)
@@ -503,8 +505,7 @@ func TestUserCannotLeaveGameRequestTheyNotPartOf(t *testing.T) {
 
 	mockSlackClient := NewMockSlackClient(ctrl)
 
-	gameMgr := NewGameManager(mockSlackClient, 100*time.Millisecond)
-	defer gameMgr.Shutdown()
+	gameMgr := NewGameManager(mockSlackClient, 10*time.Second)
 
 	channelId := "test-channel"
 	channel := SlackChannel(channelId)
@@ -534,7 +535,7 @@ func TestUserCannotLeaveOrJoinGameRequestThatDoesntExist(t *testing.T) {
 	mockSlackClient := NewMockSlackClient(ctrl)
 
 	gameMgr := NewGameManager(mockSlackClient, 100*time.Millisecond)
-	defer gameMgr.Shutdown()
+	defer gameMgr.Shutdown(context.TODO())
 
 	channelID := "channel-with-no-active-game-requests"
 	channel := SlackChannel(channelID)
@@ -563,7 +564,7 @@ func TestGameCreationFailure(t *testing.T) {
 	defer ctrl.Finish()
 	mockSlackClient := NewMockSlackClient(ctrl)
 	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
-	defer gameMgr.Shutdown()
+	defer gameMgr.Shutdown(context.TODO())
 
 	channelId := "test-channel"
 	channel := SlackChannel(channelId)
@@ -593,7 +594,7 @@ func TestGameCompletionNotification(t *testing.T) {
 
 	mockSlackClient := NewMockSlackClient(ctrl)
 	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
-	defer gameMgr.Shutdown()
+	defer gameMgr.Shutdown(context.TODO())
 
 	channelID := "12345678"
 	channel := SlackChannel(channelID)
@@ -635,4 +636,36 @@ func TestGameCompletionNotification(t *testing.T) {
 		t.Errorf("Expected all games to be deleted, but found %d games", len(gameMgr.gameRequests))
 	}
 	gameMgr.mu.Unlock()
+}
+
+func TestGameManagerShutdown(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockSlackClient := NewMockSlackClient(ctrl)
+	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
+
+	nGames := 10
+
+	for i := range nGames {
+		channelID := fmt.Sprintf("channel-%02d", i)
+
+		ts := fmt.Sprintf("ts-%02d", i)
+
+		// Expect a single announcement per game
+		mockSlackClient.EXPECT().PostMessage(gomock.Any(), gomock.Any()).
+			Return(channelID, ts, nil).
+			Times(1)
+
+		// Expect a single cleanup per game
+		mockSlackClient.EXPECT().DeleteMessageContext(gomock.Any(), channelID, ts).Times(1)
+
+		gameMgr.CreateGame(SlackChannel(channelID), fmt.Sprint(i), GameTypeTwoVsTwo)
+
+	}
+
+	gameMgr.Shutdown(context.TODO())
+	if len(gameMgr.gameRequests) != 0 {
+		t.Errorf("Expected all games to be deleted, but found %d games", len(gameMgr.gameRequests))
+	}
 }

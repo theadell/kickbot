@@ -1,6 +1,10 @@
 package main
 
-import "github.com/slack-go/slack"
+import (
+	"context"
+
+	"github.com/slack-go/slack"
+)
 
 // SlackClient is an interface representing a subset of operations from the slack.Client.
 // It's designed to abstract Slack operations for easier testing.
@@ -27,6 +31,10 @@ type SlackClient interface {
 	// DeleteMessage removes a message from a Slack channel.
 	// Returns the channel and timestamp of the deleted message or an error.
 	DeleteMessage(channel, messageTimestamp string) (string, string, error)
+
+	// DeleteMessage removes a message from a Slack channel with a custom context.
+	// Returns the channel and timestamp of the deleted message or an error.
+	DeleteMessageContext(ctx context.Context, channel, messageTimestamp string) (string, string, error)
 }
 
 // compile-time assertion to ensure that `slack.Client` implements `SlackClient`

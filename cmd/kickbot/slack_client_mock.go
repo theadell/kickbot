@@ -10,6 +10,7 @@
 package main
 
 import (
+	context "context"
 	reflect "reflect"
 
 	slack "github.com/slack-go/slack"
@@ -53,6 +54,22 @@ func (m *MockSlackClient) DeleteMessage(channel, messageTimestamp string) (strin
 func (mr *MockSlackClientMockRecorder) DeleteMessage(channel, messageTimestamp any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteMessage", reflect.TypeOf((*MockSlackClient)(nil).DeleteMessage), channel, messageTimestamp)
+}
+
+// DeleteMessageContext mocks base method.
+func (m *MockSlackClient) DeleteMessageContext(ctx context.Context, channel, messageTimestamp string) (string, string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteMessageContext", ctx, channel, messageTimestamp)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// DeleteMessageContext indicates an expected call of DeleteMessageContext.
+func (mr *MockSlackClientMockRecorder) DeleteMessageContext(ctx, channel, messageTimestamp any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteMessageContext", reflect.TypeOf((*MockSlackClient)(nil).DeleteMessageContext), ctx, channel, messageTimestamp)
 }
 
 // PostEphemeral mocks base method.
