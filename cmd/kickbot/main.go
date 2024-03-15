@@ -33,7 +33,7 @@ func main() {
 	}
 
 	// Game Manager
-	gameMgr := NewGameManager(slack.New(token), DEFAULT_GAMEREQ_TIMEOUT)
+	gameMgr := NewGameManager(slack.New(token))
 	// Routes
 	r := chi.NewRouter()
 

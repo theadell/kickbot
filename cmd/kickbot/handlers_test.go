@@ -3,11 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/slack-go/slack"
 	gomock "go.uber.org/mock/gomock"
@@ -19,19 +21,19 @@ func TestSlashCommandHandlerWithValidCommands(t *testing.T) {
 
 	mockSlackClient := NewMockSlackClient(ctrl)
 
-	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
+	gameMgr := NewGameManager(mockSlackClient)
 
 	testCases := []struct {
 		channelID string
 		command   string
 	}{
 		{
-			channelID: "test-channel-1",
+			channelID: "test-channel-regular",
 			command:   CMD_START_ROUND,
 		},
 		{
-			channelID: "test-channel-2",
-			command:   CMD_START_1V1_ROUND,
+			channelID: "test-channel-duel",
+			command:   CMD_START_ROUND,
 		},
 	}
 
@@ -42,6 +44,14 @@ func TestSlashCommandHandlerWithValidCommands(t *testing.T) {
 			mockSlackClient.EXPECT().
 				PostMessage(tc.channelID, gomock.Any()).
 				Times(1)
+
+			var parameters string
+			switch tc.channelID {
+			case "test-channel-regular":
+				parameters = ""
+			case "test-channel-duel":
+				parameters = "-d"
+			}
 
 			formData := url.Values{
 				"token":           {"mock-token"},
@@ -54,7 +64,7 @@ func TestSlashCommandHandlerWithValidCommands(t *testing.T) {
 				"user_id":         {"test-user"},
 				"user_name":       {"test"},
 				"command":         {tc.command},
-				"text":            {"test-text"},
+				"text":            {parameters},
 				"response_url":    {""},
 				"trigger_id":      {""},
 				"api_app_id":      {"app-id"},
@@ -109,7 +119,7 @@ func TestSlashCommandHandlerWithInvalidCommands(t *testing.T) {
 				PostMessage(tc.channelID, gomock.Any()).
 				Times(0)
 
-			gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
+			gameMgr := NewGameManager(mockSlackClient)
 
 			formData := url.Values{
 				"token":           {"mock-token"},
@@ -147,7 +157,7 @@ func TestSlackInteractionCallbackHandler(t *testing.T) {
 
 	mockSlackClient := NewMockSlackClient(ctrl)
 
-	gameMgr := NewGameManager(mockSlackClient, DEFAULT_GAMEREQ_TIMEOUT)
+	gameMgr := NewGameManager(mockSlackClient)
 
 	channelID := "test-channel"
 	channel := SlackChannel(channelID)
@@ -163,7 +173,11 @@ func TestSlackInteractionCallbackHandler(t *testing.T) {
 		UpdateMessage(channelID, gomock.Any(), gomock.Any()).
 		Return("channelID", "ts", "text", nil).MaxTimes(2)
 
-	gameMgr.CreateGame(channel, "unique-test-p1", GameTypeTwoVsTwo)
+	var gameOptions = GameOpts{
+		timeout:  time.Minute * 30,
+		gameType: GameTypeTwoVsTwo,
+	}
+	gameMgr.CreateGame(channel, "unique-test-p1", gameOptions)
 
 	tests := []struct {
 		name           string
@@ -246,4 +260,55 @@ func TestSlackInteractionCallbackHandler(t *testing.T) {
 		})
 	}
 
+}
+
+func TestParsingGameOptionFlags(t *testing.T) {
+
+	tests := []struct {
+		name        string
+		inputParams string
+		gameType    GameType
+		timeout     time.Duration
+	}{
+		{
+			name:        "no params regular game 30 minute timeout",
+			inputParams: "",
+			gameType:    GameTypeTwoVsTwo,
+			timeout:     time.Minute * 30,
+		},
+		{
+			name:        "Regular 60 minute timeout",
+			inputParams: "-timeout 60m",
+			gameType:    GameTypeTwoVsTwo,
+			timeout:     time.Minute * 60,
+		},
+		{
+			name:        "Duel 60 minute timeout",
+			inputParams: "-duel -t 60m",
+			gameType:    GameTypeOneVsOne,
+			timeout:     time.Minute * 60,
+		},
+		{
+			name:        "Duel 30 minute timeout",
+			inputParams: "-d",
+			gameType:    GameTypeOneVsOne,
+			timeout:     time.Minute * 30,
+		},
+	}
+
+	// Loop through each test case
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			log.Printf("Before parsing")
+			var gameOptions = parseFlags(tc.inputParams)
+			log.Printf("After parsing")
+
+			if gameOptions.gameType != tc.gameType {
+				t.Errorf("Parameters' and GameOptions' GameType doesn't match")
+			}
+			if gameOptions.timeout != tc.timeout {
+				t.Errorf("Parameters' and GameOptions' Timeout doesn't match")
+			}
+		})
+	}
 }
