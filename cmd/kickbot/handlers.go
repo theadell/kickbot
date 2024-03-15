@@ -2,8 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
+	"log"
 	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/slack-go/slack"
 )
@@ -17,11 +21,11 @@ func handleSlackCommand(gm *GameManager) http.HandlerFunc {
 			return
 		}
 
+		var gameOptions = parseFlags(cmd.Text)
+
 		switch cmd.Command {
 		case CMD_START_ROUND:
-			gm.CreateGame(SlackChannel(cmd.ChannelID), cmd.UserID, GameTypeTwoVsTwo)
-		case CMD_START_1V1_ROUND:
-			gm.CreateGame(SlackChannel(cmd.ChannelID), cmd.UserID, GameTypeOneVsOne)
+			gm.CreateGame(SlackChannel(cmd.ChannelID), cmd.UserID, gameOptions)
 		default:
 			slog.Warn("Recieved an invalid command", "command", cmd.Command, "sender", r.RemoteAddr)
 			w.WriteHeader(http.StatusBadRequest)
@@ -63,4 +67,39 @@ func handleSlackEvent(gm *GameManager) http.HandlerFunc {
 		}
 		w.WriteHeader(http.StatusOK)
 	}
+}
+
+func parseFlags(params string) GameOpts {
+	var timeout time.Duration
+	var duel bool
+
+	flagSet := flag.NewFlagSet("gameParameters", flag.ContinueOnError)
+	flagSet.DurationVar(&timeout, "timeout", time.Minute*30, "")
+	flagSet.DurationVar(&timeout, "t", timeout, "")
+	flagSet.BoolVar(&duel, "duel", false, "")
+	flagSet.BoolVar(&duel, "d", duel, "")
+	err := flagSet.Parse(strings.Fields(params))
+
+	if err != nil {
+		log.Printf(err.Error())
+	}
+
+	log.Printf("Flags read")
+
+	var gameType GameType
+	if duel {
+		gameType = GameTypeOneVsOne
+	} else {
+		gameType = GameTypeTwoVsTwo
+	}
+
+	return GameOpts{
+		timeout:  timeout,
+		gameType: gameType,
+	}
+}
+
+type GameOpts struct {
+	timeout  time.Duration
+	gameType GameType
 }

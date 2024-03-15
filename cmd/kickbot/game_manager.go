@@ -13,30 +13,26 @@ import (
 )
 
 const (
-	CMD_START_ROUND         string        = "/kicker"        // Start a standard game
-	CMD_START_1V1_ROUND                   = "/kicker1v1"     // Start 1v1 duel game
-	ACTION_JOIN_ROUND                     = "GAME_JOIN"      // Join a game
-	ACTION_LEAVE_ROUND                    = "GAME_LEAVE"     // Leave a game in "formation" state after joining
-	DEFAULT_GAMEREQ_TIMEOUT time.Duration = 30 * time.Minute // Time after which a non completed game request is deleted
+	CMD_START_ROUND    string = "/kicker"    // Start a game
+	ACTION_JOIN_ROUND         = "GAME_JOIN"  // Join a game
+	ACTION_LEAVE_ROUND        = "GAME_LEAVE" // Leave a game in "formation" state after joining
 )
 
 type SlackChannel string
 
 type GameManager struct {
-	apiClient       SlackClient
-	gameRequests    map[SlackChannel]*GameRequest
-	timeoutChan     chan SlackChannel
-	mu              sync.Mutex
-	timeoutDuration time.Duration
+	apiClient    SlackClient
+	gameRequests map[SlackChannel]*GameRequest
+	timeoutChan  chan SlackChannel
+	mu           sync.Mutex
 }
 
-func NewGameManager(client SlackClient, timeoutDuration time.Duration) *GameManager {
+func NewGameManager(client SlackClient) *GameManager {
 	gameMgr := &GameManager{
-		apiClient:       client,
-		gameRequests:    make(map[SlackChannel]*GameRequest),
-		mu:              sync.Mutex{},
-		timeoutChan:     make(chan SlackChannel, 10),
-		timeoutDuration: timeoutDuration,
+		apiClient:    client,
+		gameRequests: make(map[SlackChannel]*GameRequest),
+		mu:           sync.Mutex{},
+		timeoutChan:  make(chan SlackChannel, 10),
 	}
 	go gameMgr.handleTimeouts()
 	return gameMgr
@@ -47,16 +43,16 @@ func NewGameManager(client SlackClient, timeoutDuration time.Duration) *GameMana
 // If a game is already being prepared in the channel, no new game is created and
 // it notifies the user who attempted to start a new game.
 // The game type (e.g., TwoVsTwo, OneVsOne) is specified in the call. (/kicker & /kicker1v1)
-func (gameMgr *GameManager) CreateGame(channel SlackChannel, player string, gameType GameType) {
+func (gameMgr *GameManager) CreateGame(channel SlackChannel, player string, gameOptions GameOpts) {
 
-	gameReq := NewGameRequest(gameType, player)
+	gameReq := NewGameRequest(gameOptions.gameType, player)
 
 	if !gameMgr.setGameRequestIfNotExists(channel, gameReq) {
 		gameMgr.apiClient.PostEphemeral(string(channel), player, slack.MsgOptionText("Eine runde wird bereits vorbereitet!", false))
 		return
 	}
 
-	msg := NewGameRequestMsg(player, gameType)
+	msg := NewGameRequestMsg(player, gameOptions.gameType)
 	_, ts, err := gameMgr.apiClient.PostMessage(string(channel), msg)
 	if err != nil {
 		slog.Error("Failed to send message", "error", err)
@@ -69,7 +65,7 @@ func (gameMgr *GameManager) CreateGame(channel SlackChannel, player string, game
 	gameReq.messageTs = ts
 	ctx, cancel := context.WithCancel(context.Background())
 	gameReq.timerCancelFunc = cancel
-	gameReq.timer = time.AfterFunc(gameMgr.timeoutDuration, func() {
+	gameReq.timer = time.AfterFunc(gameOptions.timeout, func() {
 		select {
 		case <-ctx.Done():
 			return
