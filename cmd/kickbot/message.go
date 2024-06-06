@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/slack-go/slack"
 	"strings"
+
+	"github.com/slack-go/slack"
 )
 
 var joinBtn = slack.ButtonBlockElement{
@@ -70,3 +71,5 @@ func GameRequestUpdateMsg(playerIds []string, quorum int) slack.MsgOption {
 
 	return slack.MsgOptionBlocks(blocks...)
 }
+
+var timeoutMSG = slack.MsgOptionText("Die Kicker-Runde ist abgelaufen. Nicht genug Spieler gefunden.", false)

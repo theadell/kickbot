@@ -369,8 +369,8 @@ func TestGameReqTimeout(t *testing.T) {
 
 	// nGames messages for game deletion
 	mockSlackClient.EXPECT().
-		DeleteMessage(gomock.Any(), gomock.Any()).
-		Return("ch", "ts", nil).MaxTimes(nGames)
+		UpdateMessage(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("ch", "ts", "", nil).MaxTimes(nGames)
 
 	gameMgr := NewGameManager(mockSlackClient)
 	defer gameMgr.Shutdown(context.TODO())

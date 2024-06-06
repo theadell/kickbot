@@ -237,13 +237,13 @@ func (gm *GameManager) setGameRequestIfNotExists(channel SlackChannel, game *Gam
 
 // handleTimeouts manages the timeouts of game requests. It listens for timeout
 // signals on a channel and handles the expiration of game requests accordingly. When a timeout occurs, the
-// function deletes the game request and its associated Slack message from the specified channel.
+// function updates the game request and its associated Slack message from the specified channel.
 func (gameMgr *GameManager) handleTimeouts() {
 	for channel := range gameMgr.timeoutChan {
 		if gameReq, exists := gameMgr.getGameRequest(channel); exists {
 			ts := gameReq.messageTs
 			gameMgr.deleteGameRequest(channel)
-			gameMgr.apiClient.DeleteMessage(string(channel), ts)
+			gameMgr.apiClient.UpdateMessage(string(channel), ts, timeoutMSG)
 		}
 	}
 }

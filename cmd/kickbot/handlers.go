@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"log"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -81,10 +80,8 @@ func parseFlags(params string) GameOpts {
 	err := flagSet.Parse(strings.Fields(params))
 
 	if err != nil {
-		log.Printf(err.Error())
+		slog.Error("error parsing flags in game request", err)
 	}
-
-	log.Printf("Flags read")
 
 	var gameType GameType
 	if duel {
