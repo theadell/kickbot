@@ -20,11 +20,12 @@ func handleSlackCommand(gm *GameManager) http.HandlerFunc {
 			return
 		}
 
-		var gameOptions = parseFlags(cmd.Text)
-
 		switch cmd.Command {
 		case CMD_START_ROUND:
+			var gameOptions = parseFlags(cmd.Text)
 			gm.CreateGame(SlackChannel(cmd.ChannelID), cmd.UserID, gameOptions)
+		case CMD_CANCEL_ROUND:
+			gm.CancelGame(SlackChannel(cmd.ChannelID), cmd.UserID)
 		default:
 			slog.Warn("Recieved an invalid command", "command", cmd.Command, "sender", r.RemoteAddr)
 			w.WriteHeader(http.StatusBadRequest)

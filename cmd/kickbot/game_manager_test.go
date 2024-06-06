@@ -724,3 +724,129 @@ func TestGameManagerShutdown(t *testing.T) {
 		t.Errorf("Expected all games to be deleted, but found %d games", len(gameMgr.gameRequests))
 	}
 }
+
+func TestCancelGame(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockSlackClient := NewMockSlackClient(ctrl)
+	gameMgr := NewGameManager(mockSlackClient)
+
+	channel := SlackChannel("test-channel")
+	creator := "creator"
+	nonCreator := "non-creator"
+
+	gameReq := &GameRequest{
+		players:   []string{creator, nonCreator},
+		quorum:    2,
+		messageTs: "ts",
+		mu:        &sync.Mutex{},
+	}
+	gameMgr.gameRequests[channel] = gameReq
+
+	// Case 1: Non-creator attempts to cancel the game
+	mockSlackClient.EXPECT().
+		PostEphemeral(string(channel), nonCreator, gomock.Any()).
+		Return("timestamp", nil).Times(1)
+
+	gameMgr.CancelGame(channel, nonCreator)
+
+	// Verify the game still exists after the non-creator's attempt
+	gameMgr.mu.Lock()
+	if _, exists := gameMgr.gameRequests[channel]; !exists {
+		t.Errorf("Game should still exist after non-creator's cancel attempt")
+	}
+	gameMgr.mu.Unlock()
+
+	// Case 2: Creator cancels the game
+	mockSlackClient.EXPECT().
+		UpdateMessage(string(channel), "ts", gomock.Any()).
+		Return("channelID", "timestamp", "text", nil).Times(1)
+
+	gameMgr.CancelGame(channel, creator)
+
+	// Verify the game is deleted after the creator's cancel attempt
+	gameMgr.mu.Lock()
+	if _, exists := gameMgr.gameRequests[channel]; exists {
+		t.Errorf("Game should not exist after creator's cancel attempt")
+	}
+	gameMgr.mu.Unlock()
+}
+
+func TestCancelNonExistingGame(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockSlackClient := NewMockSlackClient(ctrl)
+	gameMgr := NewGameManager(mockSlackClient)
+
+	channel := SlackChannel("test-channel")
+	player := "player"
+
+	// Case: Player attempts to cancel a non-existing game
+	mockSlackClient.EXPECT().
+		PostEphemeral(string(channel), player, gomock.Any()).
+		Return("timestamp", nil).Times(1)
+
+	gameMgr.CancelGame(channel, player)
+}
+
+func TestConcurrentCancelGame(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockSlackClient := NewMockSlackClient(ctrl)
+	gameMgr := NewGameManager(mockSlackClient)
+
+	channel := SlackChannel("test-channel")
+	creator := "creator"
+
+	nonCreators := []string{"non-creator-1", "non-creator-2", "non-creator-3", "non-creator-4", "non-creator-5", "non-creator-6", "non-creator-7", "non-creator-8", "non-creator-9"}
+
+	gameReq := &GameRequest{
+		players:   append([]string{creator}, nonCreators...),
+		quorum:    20,
+		messageTs: "ts",
+		mu:        &sync.Mutex{},
+	}
+	gameMgr.mu.Lock()
+	gameMgr.gameRequests[channel] = gameReq
+	gameMgr.mu.Unlock()
+
+	// Expect an update message for the creator's cancel attempt
+	mockSlackClient.EXPECT().
+		UpdateMessage(string(channel), "ts", gomock.Any()).
+		Return("channelID", "timestamp", "text", nil).Times(1)
+
+	// Expect ephemeral messages for other players
+	mockSlackClient.EXPECT().
+		PostEphemeral(string(channel), gomock.Any(), gomock.Any()).
+		Return("timestamp", nil).AnyTimes()
+
+	wg := &sync.WaitGroup{}
+	numConcurrentRequests := 10
+	wg.Add(numConcurrentRequests)
+
+	go func() {
+		defer wg.Done()
+		gameMgr.CancelGame(channel, creator)
+	}()
+	for _, nonCreator := range nonCreators {
+		go func(nonCreator string) {
+			defer wg.Done()
+			gameMgr.CancelGame(channel, nonCreator)
+		}(nonCreator)
+	}
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+
+	// Verify the game is deleted after the creator's cancel attempt
+	gameMgr.mu.Lock()
+	_, exists := gameMgr.gameRequests[channel]
+	gameMgr.mu.Unlock()
+
+	if exists {
+		t.Errorf("Game should not exist after creator's cancel attempt")
+	}
+}

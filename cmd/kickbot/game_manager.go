@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	CMD_START_ROUND    string = "/kicker"    // Start a game
-	ACTION_JOIN_ROUND         = "GAME_JOIN"  // Join a game
-	ACTION_LEAVE_ROUND        = "GAME_LEAVE" // Leave a game in "formation" state after joining
+	CMD_START_ROUND    string = "/kicker"           // Start a game
+	CMD_CANCEL_ROUND          = "/kicker-abbrechen" // cancel a game
+	ACTION_JOIN_ROUND         = "GAME_JOIN"         // Join a game
+	ACTION_LEAVE_ROUND        = "GAME_LEAVE"        // Leave a game in "formation" state after joining
 )
 
 type SlackChannel string
@@ -75,6 +76,33 @@ func (gameMgr *GameManager) CreateGame(channel SlackChannel, player string, game
 	})
 	gameReq.mu.Unlock()
 
+}
+
+// CancelGame cancels an ongoing game round in the specified Slack channel. It updates the game request status
+// in the Slack channel and notifies the users about the cancellation.
+func (gameMgr *GameManager) CancelGame(channel SlackChannel, requester string) {
+	gameReq, exists := gameMgr.getGameRequest(channel)
+	if !exists {
+		gameMgr.apiClient.PostEphemeral(string(channel), requester, slack.MsgOptionText("Kein Spiel ist derzeit aktiv.", false))
+		return
+	}
+
+	gameReq.mu.Lock()
+	isCreator := len(gameReq.players) > 0 && gameReq.players[0] == requester
+	gameReq.mu.Unlock()
+
+	if !isCreator {
+		gameMgr.apiClient.PostEphemeral(string(channel), requester, slack.MsgOptionText("Nur der Ersteller des Spiels kann es abbrechen.", false))
+		return
+	}
+
+	gameMgr.deleteGameRequest(channel)
+
+	cancelMessage := slack.MsgOptionText("Die Runde wurde abgebrochen.", false)
+	_, _, _, err := gameMgr.apiClient.UpdateMessage(string(channel), gameReq.messageTs, cancelMessage)
+	if err != nil {
+		slog.Error("Failed to update game message", "error", err)
+	}
 }
 
 // JoinGame is called when a user wants to join an existing game request. It updates the game request status

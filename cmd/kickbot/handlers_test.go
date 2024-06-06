@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -24,26 +23,47 @@ func TestSlashCommandHandlerWithValidCommands(t *testing.T) {
 	gameMgr := NewGameManager(mockSlackClient)
 
 	testCases := []struct {
-		channelID string
-		command   string
+		channelID      string
+		command        string
+		expectedCalls  func()
+		expectedStatus int
 	}{
 		{
 			channelID: "test-channel-regular",
 			command:   CMD_START_ROUND,
+			expectedCalls: func() {
+				mockSlackClient.EXPECT().
+					PostMessage("test-channel-regular", gomock.Any()).
+					Times(1)
+			},
+			expectedStatus: http.StatusOK,
 		},
 		{
 			channelID: "test-channel-duel",
 			command:   CMD_START_ROUND,
+			expectedCalls: func() {
+				mockSlackClient.EXPECT().
+					PostMessage("test-channel-duel", gomock.Any()).
+					Times(1)
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			channelID: "test-channel-cancel",
+			command:   CMD_CANCEL_ROUND,
+			expectedCalls: func() {
+				mockSlackClient.EXPECT().
+					PostEphemeral("test-channel-cancel", "test-user", gomock.Any()).
+					Times(1)
+			},
+			expectedStatus: http.StatusOK,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("channelID: %s, command: %s", tc.channelID, tc.command), func(t *testing.T) {
 
-			// Expect a PostMessage call for each new game
-			mockSlackClient.EXPECT().
-				PostMessage(tc.channelID, gomock.Any()).
-				Times(1)
+			tc.expectedCalls()
 
 			var parameters string
 			switch tc.channelID {
@@ -76,7 +96,7 @@ func TestSlashCommandHandlerWithValidCommands(t *testing.T) {
 
 			handleSlackCommand(gameMgr)(rr, req)
 
-			if rr.Result().StatusCode != http.StatusOK {
+			if rr.Result().StatusCode != tc.expectedStatus {
 				t.Errorf("Status code returned, %d, did not match expected code %d", rr.Result().StatusCode, http.StatusOK)
 			}
 		})
@@ -299,9 +319,7 @@ func TestParsingGameOptionFlags(t *testing.T) {
 	// Loop through each test case
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			log.Printf("Before parsing")
 			var gameOptions = parseFlags(tc.inputParams)
-			log.Printf("After parsing")
 
 			if gameOptions.gameType != tc.gameType {
 				t.Errorf("Parameters' and GameOptions' GameType doesn't match")
